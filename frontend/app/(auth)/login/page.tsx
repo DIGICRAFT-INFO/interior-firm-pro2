@@ -1,13 +1,13 @@
-
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { Eye, EyeOff, Lock, Mail, Loader2, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loginUser } from "@/services/authService";
 
-export default function LoginPage() {
+// 1. The main login content separated into its own component
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
@@ -149,5 +149,20 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// 2. The default export that wraps the content in a Suspense boundary
+export default function LoginPage() {
+  return (
+    <Suspense 
+      fallback={
+        <div className="min-h-screen bg-[#FAF8F5] flex items-center justify-center p-4">
+          <Loader2 size={32} className="animate-spin text-[#C8922A]" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }
