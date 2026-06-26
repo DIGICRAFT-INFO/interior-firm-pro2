@@ -14,7 +14,10 @@ const app = express();
 // ==========================================
 // 1. MIDDLEWARES
 // ==========================================
-app.use(cors()); // Allow Cross-Origin requests
+app.use(cors({
+  origin: 'http://localhost:3000', // Update this later for production!
+  credentials: true
+}));
 app.use(express.json()); // Body parser to read JSON data
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
