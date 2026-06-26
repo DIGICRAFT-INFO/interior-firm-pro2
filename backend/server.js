@@ -15,7 +15,7 @@ const app = express();
 // 1. MIDDLEWARES
 // ==========================================
 app.use(cors({
-  origin: 'http://localhost:3000', // Update this later for production!
+  origin: ['http://localhost:3000', 'https://interior-firm-pro2.vercel.app'], 
   credentials: true
 }));
 app.use(express.json()); // Body parser to read JSON data
