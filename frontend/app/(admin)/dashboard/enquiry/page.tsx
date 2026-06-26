@@ -164,14 +164,16 @@ export default function EnquiriesPage() {
   const getId = (e: Enquiry) => e._id || e.id;
 
   // ── Fetch ────────────────────────────────────────────────────────────────
-  const fetchEnquiries = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const token = localStorage.getItem("access");
-      const res = await fetch(`${API_BASE_URL}/enquiries/`, {
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      });
+const fetchEnquiries = useCallback(async () => {
+  const token = localStorage.getItem("access");
+  if (!token) return; // ← ADD THIS — don't call API without a token
+  
+  setIsLoading(true);
+  setError(null);
+  try {
+    const res = await fetch(`${API_BASE_URL}/enquiries/`, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    });
       if (!res.ok) throw new Error(`Failed to fetch enquiries (${res.status})`);
       const data = await res.json();
       setEnquiries(Array.isArray(data) ? data : data.results || []);

@@ -27,7 +27,10 @@ function getRelativeTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
-export default function NotificationBell() {
+// isReady: gates polling until the layout confirms auth is resolved.
+// Prevents React 18 Strict Mode double-invoke from firing requests
+// before localStorage has a token (causes 401 noise in dev).
+export default function NotificationBell({ isReady = true }: { isReady?: boolean }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<InAppNotification[]>([]);
@@ -35,7 +38,9 @@ export default function NotificationBell() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // Fetch unread count on mount and poll every 30s
+  // fetchUnreadCount() guards against a missing token internally —
+  // this isReady gate is an additional layer to avoid the interval
+  // even starting before auth is confirmed.
   const loadUnreadCount = useCallback(async () => {
     try {
       const count = await fetchUnreadCount();
@@ -46,10 +51,11 @@ export default function NotificationBell() {
   }, []);
 
   useEffect(() => {
+    if (!isReady) return;
     loadUnreadCount();
     const interval = setInterval(loadUnreadCount, 30000);
     return () => clearInterval(interval);
-  }, [loadUnreadCount]);
+  }, [loadUnreadCount, isReady]);
 
   // Fetch notifications when dropdown opens
   const loadNotifications = useCallback(async () => {

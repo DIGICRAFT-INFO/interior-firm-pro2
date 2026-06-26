@@ -19,7 +19,6 @@ interface NotificationsResponse {
   totalPages: number;
 }
 
-// BUG FIX: Check all possible token storage keys
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
   return (
@@ -38,11 +37,10 @@ function getHeaders(): HeadersInit {
   };
 }
 
-// BUG FIX: All URLs now use trailing slashes (matching Express routes)
 export async function fetchNotifications(params?: {
   page?: number;
   limit?: number;
-  type?: string;   // can be group prefix (invoice, quotation, etc.) or exact event_type
+  type?: string;
   is_read?: boolean;
 }): Promise<NotificationsResponse> {
   const searchParams = new URLSearchParams();
@@ -60,10 +58,14 @@ export async function fetchNotifications(params?: {
 }
 
 export async function fetchUnreadCount(): Promise<number> {
+  // Guard: skip the request entirely if there's no token.
+  // Prevents 401 noise during React Strict Mode double-invoke on mount.
+  if (!getToken()) return 0;
+
   const res = await fetch(`${API_BASE_URL}/in-app-notifications/unread-count/`, {
     headers: getHeaders(),
   });
-  if (!res.ok) return 0; // Silent fail — bell badge just shows 0
+  if (!res.ok) return 0;
   const data = await res.json();
   return data.count ?? 0;
 }
@@ -86,7 +88,6 @@ export async function markAllAsRead(): Promise<{ modified_count: number }> {
   return res.json();
 }
 
-// BUG FIX: Was missing deleteNotification export — used by notifications page
 export async function deleteNotification(id: string): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/in-app-notifications/${id}/`, {
     method: "DELETE",

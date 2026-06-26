@@ -68,6 +68,9 @@ app.use('/api/v1/invoices', require('./routes/invoice_urls'));
 // Payments
 app.use('/api/v1/payments', require('./routes/payment_urls'));
 
+// Enquiries
+app.use('/api/v1/enquiries', require('./routes/enquiry_routes'));
+
 // Notifications (WhatsApp, Email & Logs)
 app.use('/api/v1/notifications', require('./routes/notification_urls'));
 

@@ -19,6 +19,7 @@ import {
   Menu,
   X,
   ShieldAlert,
+  MessageSquare
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import "./../globals.css";
@@ -43,6 +44,8 @@ const navItems: NavItem[] = [
   { label: "Portfolio", href: "/dashboard/portfolio", icon: Receipt, roles: ["owner", "manager"] },
   { label: "Payments", href: "/dashboard/payments", icon: CreditCard, roles: ["owner", "manager", "accountant"] },
   { label: "Pending Users", href: "/dashboard/pending-users", icon: ShieldAlert, roles: ["owner", "manager"] },
+
+  { label: "Enquiries", href: "/dashboard/enquiry", icon: MessageSquare },
   { label: "History", href: "/dashboard/history", icon: History },
   { label: "Notifications", href: "/dashboard/notifications", icon: BellRing },
   { label: "Master Services", href: "/dashboard/services", icon: Layers, roles: ["owner", "manager", "designer"] },
@@ -264,7 +267,7 @@ export default function DashboardLayout({
           </button>
 
           <div className="flex items-center gap-3 ml-auto">
-            <NotificationBell />
+            <NotificationBell isReady={authChecked} />
 
             <div className="flex items-center gap-2 px-2.5 py-1.5 md:px-3 md:py-2 rounded-lg bg-[#FAF8F5] border border-[#EDE8DF]">
               <div className="w-7 h-7 rounded-full bg-[#C8922A] flex items-center justify-center text-white text-xs font-bold shrink-0">
