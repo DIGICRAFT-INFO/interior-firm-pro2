@@ -62,9 +62,9 @@ export default function WeatherWidget() {
   const [loading, setLoading] = useState(true);
   const [weatherCode, setWeatherCode] = useState(0);
 
-  const fetchWeather = useCallback(async (lat: number, lon: number) => {
+  const fetchWeather = useCallback(async (lat: number, lon: number, cityName?: string) => {
     try {
-      // Using Open-Meteo API — free, no API key required
+      // Using Open-Meteo API for weather
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=auto`;
       const res = await fetch(url);
       if (!res.ok) throw new Error("Weather fetch failed");
@@ -75,13 +75,17 @@ export default function WeatherWidget() {
 
       setWeatherCode(code);
 
-      // Reverse geocode for city name
-      let locationName = "Your Location";
-      try {
-        const geoRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&timezone=auto&forecast_days=1`);
-        const geoData = await geoRes.json();
-        locationName = geoData.timezone?.replace(/_/g, " ").split("/").pop() || "Your Location";
-      } catch {}
+      // Fetch actual city name using BigDataCloud free API instead of timezone
+      let locationName = cityName || "Your Location";
+      if (!cityName) {
+        try {
+          const geoRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`);
+          const geoData = await geoRes.json();
+          locationName = geoData.city || geoData.locality || "Your Location";
+        } catch (err) {
+          console.error("City fetch failed", err);
+        }
+      }
 
       const weatherData: WeatherData = {
         temperature: Math.round(current.temperature_2m),
@@ -107,8 +111,8 @@ export default function WeatherWidget() {
   }, []);
 
   const fetchDefaultWeather = useCallback(async () => {
-    // Default: Mumbai coordinates
-    await fetchWeather(19.076, 72.8777);
+    // Default: Raipur coordinates 
+    await fetchWeather(21.2514, 81.6296, "Raipur");
   }, [fetchWeather]);
 
   useEffect(() => {
