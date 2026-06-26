@@ -19,9 +19,15 @@ interface NotificationsResponse {
   totalPages: number;
 }
 
+// BUG FIX: Check all possible token storage keys
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("access") || localStorage.getItem("token");
+  return (
+    localStorage.getItem("access") ||
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    null
+  );
 }
 
 function getHeaders(): HeadersInit {
@@ -32,49 +38,59 @@ function getHeaders(): HeadersInit {
   };
 }
 
+// BUG FIX: All URLs now use trailing slashes (matching Express routes)
 export async function fetchNotifications(params?: {
   page?: number;
   limit?: number;
-  type?: string;
+  type?: string;   // can be group prefix (invoice, quotation, etc.) or exact event_type
   is_read?: boolean;
 }): Promise<NotificationsResponse> {
   const searchParams = new URLSearchParams();
-  if (params?.page) searchParams.set("page", String(params.page));
-  if (params?.limit) searchParams.set("limit", String(params.limit));
-  if (params?.type) searchParams.set("type", params.type);
-  if (params?.is_read !== undefined) searchParams.set("is_read", String(params.is_read));
+  if (params?.page)                    searchParams.set("page",    String(params.page));
+  if (params?.limit)                   searchParams.set("limit",   String(params.limit));
+  if (params?.type)                    searchParams.set("type",    params.type);
+  if (params?.is_read !== undefined)   searchParams.set("is_read", String(params.is_read));
 
   const query = searchParams.toString();
-  const url = `${API_BASE_URL}/in-app-notifications${query ? `?${query}` : ""}`;
+  const url = `${API_BASE_URL}/in-app-notifications/${query ? `?${query}` : ""}`;
 
   const res = await fetch(url, { headers: getHeaders() });
-  if (!res.ok) throw new Error("Failed to fetch notifications");
+  if (!res.ok) throw new Error(`Failed to fetch notifications: ${res.status}`);
   return res.json();
 }
 
 export async function fetchUnreadCount(): Promise<number> {
-  const res = await fetch(`${API_BASE_URL}/in-app-notifications/unread-count`, {
+  const res = await fetch(`${API_BASE_URL}/in-app-notifications/unread-count/`, {
     headers: getHeaders(),
   });
-  if (!res.ok) throw new Error("Failed to fetch unread count");
+  if (!res.ok) return 0; // Silent fail — bell badge just shows 0
   const data = await res.json();
   return data.count ?? 0;
 }
 
 export async function markAsRead(id: string): Promise<InAppNotification> {
-  const res = await fetch(`${API_BASE_URL}/in-app-notifications/${id}/read`, {
+  const res = await fetch(`${API_BASE_URL}/in-app-notifications/${id}/read/`, {
     method: "PATCH",
     headers: getHeaders(),
   });
-  if (!res.ok) throw new Error("Failed to mark notification as read");
+  if (!res.ok) throw new Error(`Failed to mark as read: ${res.status}`);
   return res.json();
 }
 
 export async function markAllAsRead(): Promise<{ modified_count: number }> {
-  const res = await fetch(`${API_BASE_URL}/in-app-notifications/mark-all-read`, {
+  const res = await fetch(`${API_BASE_URL}/in-app-notifications/mark-all-read/`, {
     method: "PATCH",
     headers: getHeaders(),
   });
-  if (!res.ok) throw new Error("Failed to mark all notifications as read");
+  if (!res.ok) throw new Error(`Failed to mark all as read: ${res.status}`);
   return res.json();
+}
+
+// BUG FIX: Was missing deleteNotification export — used by notifications page
+export async function deleteNotification(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/in-app-notifications/${id}/`, {
+    method: "DELETE",
+    headers: getHeaders(),
+  });
+  if (!res.ok && res.status !== 204) throw new Error(`Delete failed: ${res.status}`);
 }

@@ -1,48 +1,36 @@
 const express = require('express');
 const router = express.Router();
-const controller = require('../controllers/master_service_controller');
-const { is_authenticated, is_manager_or_above, is_owner } = require('../middleware/permissions');
+const ctrl = require('../controllers/master_service_controller');
+const { is_authenticated, is_manager_or_above, is_finance_or_above } = require('../middleware/permissions');
 
-// -------------------------------------------------------------
-// GET /  — List all services (any authenticated user)
-// POST / — Create a new service (manager or above)
-// -------------------------------------------------------------
+// GET /            → list all services (any authenticated user)
+// POST /           → create service (manager+)
 router.route('/')
-  .get(is_authenticated, controller.list_services)
-  .post(is_authenticated, is_manager_or_above, controller.create_service);
+  .get(is_authenticated, ctrl.get_services)
+  .post(is_authenticated, is_manager_or_above, ctrl.create_service);
 
-// -------------------------------------------------------------
-// Client services route (placed before :id to avoid conflicts)
-// GET /client/:clientId — Get services assigned to a client
-// -------------------------------------------------------------
-router.get('/client/:clientId', is_authenticated, controller.get_client_services);
+// POST /:id/media/       → upload media files
+router.post('/:id/media/', is_authenticated, is_manager_or_above, ctrl.uploadMiddleware, ctrl.upload_media);
 
-// -------------------------------------------------------------
-// Media routes
-// POST /:id/media — Upload media files (max 10)
-// DELETE /:id/media/:mediaId — Remove a media entry
-// -------------------------------------------------------------
-router.post('/:id/media', is_authenticated, is_manager_or_above, controller.upload.array('files', 10), controller.upload_media);
-router.delete('/:id/media/:mediaId', is_authenticated, is_manager_or_above, controller.delete_media);
+// DELETE /:id/media/:mediaId/ → delete a media file
+router.delete('/:id/media/:mediaId/', is_authenticated, is_manager_or_above, ctrl.delete_media);
 
-// -------------------------------------------------------------
-// Assignment routes
-// POST /:id/assign — Assign service to a client
-// DELETE /:id/assign/:clientId — Unassign service from a client
-// GET /:id/assignments — List assignments for a service
-// -------------------------------------------------------------
-router.post('/:id/assign', is_authenticated, is_manager_or_above, controller.assign_service);
-router.delete('/:id/assign/:clientId', is_authenticated, is_manager_or_above, controller.unassign_service);
-router.get('/:id/assignments', is_authenticated, controller.get_service_assignments);
-
-// -------------------------------------------------------------
-// GET /:id  — Get single service (any authenticated user)
-// PUT /:id  — Update a service (manager or above)
-// DELETE /:id — Soft-delete a service (owner only)
-// -------------------------------------------------------------
+// GET /:id         → service detail
+// PUT /:id         → full update (manager+)
+// BUG FIX: Added PATCH support — frontend sends PATCH but old routes only had PUT
+// PATCH /:id       → partial update (manager+)
+// DELETE /:id      → delete (manager+)
 router.route('/:id')
-  .get(is_authenticated, controller.get_service)
-  .put(is_authenticated, is_manager_or_above, controller.update_service)
-  .delete(is_authenticated, is_manager_or_above, controller.delete_service);
+  .get(is_authenticated, ctrl.get_service_detail)
+  .put(is_authenticated, is_manager_or_above, ctrl.update_service)
+  .patch(is_authenticated, is_manager_or_above, ctrl.update_service)
+  .delete(is_authenticated, is_manager_or_above, ctrl.delete_service);
+
+// BUG FIX: Also support trailing slash variants (Next.js/Axios may append /)
+router.route('/:id/')
+  .get(is_authenticated, ctrl.get_service_detail)
+  .put(is_authenticated, is_manager_or_above, ctrl.update_service)
+  .patch(is_authenticated, is_manager_or_above, ctrl.update_service)
+  .delete(is_authenticated, is_manager_or_above, ctrl.delete_service);
 
 module.exports = router;

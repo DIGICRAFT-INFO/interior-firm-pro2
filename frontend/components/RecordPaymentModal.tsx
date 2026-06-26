@@ -5,6 +5,7 @@ import {
   X, CreditCard, Calendar, Hash, FileText,
   CheckCircle, Loader2, ChevronDown
 } from "lucide-react";
+import API_BASE_URL from "@/lib/config";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,7 +24,7 @@ interface RecordPaymentModalProps {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  preselectedInvoice?: Invoice | null; // pass when opened from a row
+  preselectedInvoice?: Invoice | null;
 }
 
 const PAYMENT_MODES = [
@@ -44,29 +45,49 @@ const REF_PLACEHOLDER: Record<string, string> = {
   other:         "Reference number",
 };
 
-// ── API helpers ───────────────────────────────────────────────────────────────
-
-async function fetchAllInvoices(): Promise<Invoice[]> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : "";
-  const res = await fetch("/api/v1/invoices/?status=issued&status=partially_paid&status=overdue", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error("Failed to fetch invoices");
-  return res.json();
+// ── Token helper ──────────────────────────────────────────────────────────────
+// BUG FIX #3: Unified token helper — checks all storage keys to avoid
+// silent auth failures when different parts of the app use different keys.
+function getToken(): string {
+  if (typeof window === "undefined") return "";
+  return (
+    localStorage.getItem("access") ||
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token") ||
+    ""
+  );
 }
 
+// ── API helpers ───────────────────────────────────────────────────────────────
+// BUG FIX #4: Was using hardcoded relative path "/api/v1/invoices/" which
+// requires a Next.js proxy config that doesn't exist in next.config.ts.
+// Fixed to use API_BASE_URL from @/lib/config (points to http://localhost:5000/api/v1).
+//
+// BUG FIX #5: Invoice status filter used "partially_paid" but the backend
+// enum is "partial". Fixed all three status values to match backend enums.
+async function fetchAllInvoices(): Promise<Invoice[]> {
+  const res = await fetch(
+    `${API_BASE_URL}/invoices/?status=issued&status=partial&status=overdue`,
+    { headers: { Authorization: `Bearer ${getToken()}` } }
+  );
+  if (!res.ok) throw new Error(`Failed to fetch invoices: ${res.status}`);
+  const data = await res.json();
+  return (data.results ?? data) as Invoice[];
+}
+
+// BUG FIX #6: Was using hardcoded "/api/v1/payments/" without proxy.
 async function recordPayment(payload: object): Promise<void> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : "";
-  const res = await fetch("/api/v1/payments/", {
+  const res = await fetch(`${API_BASE_URL}/payments/`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${getToken()}`,
     },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const err = await res.json();
+    let err: unknown;
+    try { err = await res.json(); } catch { err = { error: `HTTP ${res.status}` }; }
     throw new Error(JSON.stringify(err));
   }
 }
@@ -79,11 +100,11 @@ export default function RecordPaymentModal({
   onSuccess,
   preselectedInvoice,
 }: RecordPaymentModalProps) {
-  const [invoices, setInvoices]       = useState<Invoice[]>([]);
-  const [loadingInv, setLoadingInv]   = useState(false);
-  const [submitting, setSubmitting]   = useState(false);
-  const [success, setSuccess]         = useState(false);
-  const [error, setError]             = useState("");
+  const [invoices, setInvoices]     = useState<Invoice[]>([]);
+  const [loadingInv, setLoadingInv] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess]       = useState(false);
+  const [error, setError]           = useState("");
 
   // form state
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -92,29 +113,32 @@ export default function RecordPaymentModal({
   const [mode, setMode]           = useState("bank_transfer");
   const [reference, setReference] = useState("");
   const [notes, setNotes]         = useState("");
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [showDropdown, setShowDropdown]   = useState(false);
   const [invoiceSearch, setInvoiceSearch] = useState("");
 
-  // Load unpaid invoices
+  // Load unpaid invoices when modal opens
   useEffect(() => {
     if (!open) return;
     setLoadingInv(true);
     fetchAllInvoices()
       .then(setInvoices)
-      .catch(() => setInvoices([]))
+      .catch((err) => {
+        console.error("Invoice fetch failed:", err);
+        setInvoices([]);
+      })
       .finally(() => setLoadingInv(false));
   }, [open]);
 
-  // Preselect invoice from row click
+  // Preselect invoice when opened from a table row
   useEffect(() => {
-    if (preselectedInvoice) {
+    if (preselectedInvoice && open) {
       setSelectedInvoice(preselectedInvoice);
       const bal = parseFloat(preselectedInvoice.balance_due || "0");
       setAmount(bal > 0 ? bal.toFixed(2) : "");
     }
   }, [preselectedInvoice, open]);
 
-  // Reset on close
+  // Reset all form state on close
   useEffect(() => {
     if (!open) {
       setTimeout(() => {
@@ -127,47 +151,55 @@ export default function RecordPaymentModal({
         setError("");
         setSuccess(false);
         setInvoiceSearch("");
+        setShowDropdown(false);
       }, 300);
     }
   }, [open]);
 
   const filteredInvoices = invoices.filter(inv =>
     inv.invoice_number.toLowerCase().includes(invoiceSearch.toLowerCase()) ||
-    inv.client_name.toLowerCase().includes(invoiceSearch.toLowerCase())
+    (inv.client_name ?? "").toLowerCase().includes(invoiceSearch.toLowerCase())
   );
 
   const balanceDue = selectedInvoice
     ? parseFloat(selectedInvoice.balance_due || selectedInvoice.grand_total || "0")
     : 0;
 
-  const amountNum = parseFloat(amount || "0");
+  const amountNum  = parseFloat(amount || "0");
   const isOverpaying = amountNum > balanceDue && balanceDue > 0;
 
   async function handleSubmit() {
     setError("");
+
+    // Validations
     if (!selectedInvoice) { setError("Please select an invoice."); return; }
-    if (!amount || amountNum <= 0) { setError("Enter a valid amount."); return; }
+    if (!amount || amountNum <= 0) { setError("Enter a valid amount greater than 0."); return; }
+    if (!date) { setError("Please select a payment date."); return; }
 
     setSubmitting(true);
     try {
       await recordPayment({
         invoice:          selectedInvoice.id,
-        amount_paid:      amountNum.toFixed(2),
+        amount_paid:      amountNum,          // send as number, not string
         payment_date:     date,
         payment_mode:     mode,
-        reference_number: reference,
-        notes,
+        reference_number: reference.trim(),
+        notes:            notes.trim(),
       });
       setSuccess(true);
       setTimeout(() => {
         onSuccess();
         onClose();
-      }, 1200);
+      }, 1400);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to record payment";
       try {
         const parsed = JSON.parse(msg);
-        setError(Object.values(parsed).flat().join(" "));
+        // Handle both { error: "..." } and { field: ["..."] } shapes
+        const text = typeof parsed === "object"
+          ? Object.values(parsed).flat().join(" ")
+          : String(parsed);
+        setError(text);
       } catch {
         setError(msg);
       }
@@ -208,7 +240,7 @@ export default function RecordPaymentModal({
               <CheckCircle size={32} className="text-[#10B981]" />
             </div>
             <p className="text-[15px] font-semibold text-[#1C1C1C]">Payment Recorded!</p>
-            <p className="text-[13px] text-[#9A8F82]">Invoice status has been updated.</p>
+            <p className="text-[13px] text-[#9A8F82]">Invoice status has been updated automatically.</p>
           </div>
         ) : (
           <div className="px-6 py-5 space-y-4 max-h-[80vh] overflow-y-auto">
@@ -222,7 +254,7 @@ export default function RecordPaymentModal({
                 // Locked — opened from a row
                 <div className="flex items-center gap-3 bg-[#FAF8F5] border border-[#EDE8DF] rounded-xl px-4 py-3">
                   <div className="w-8 h-8 rounded-full bg-[#FDF3E3] text-[#C8922A] text-[11px] font-bold flex items-center justify-center">
-                    {selectedInvoice?.client_name?.charAt(0) || "?"}
+                    {(selectedInvoice?.client_name || "?").charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-[#1C1C1C]">
@@ -232,7 +264,7 @@ export default function RecordPaymentModal({
                       {selectedInvoice?.client_name} · {selectedInvoice?.project_name}
                     </p>
                   </div>
-                  <p className="text-[13px] font-bold text-[#EF4444]">
+                  <p className="text-[13px] font-bold text-[#EF4444] whitespace-nowrap">
                     ₹{parseFloat(selectedInvoice?.balance_due || "0").toLocaleString("en-IN")} due
                   </p>
                 </div>
@@ -247,7 +279,7 @@ export default function RecordPaymentModal({
                     {selectedInvoice ? (
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="w-7 h-7 rounded-full bg-[#FDF3E3] text-[#C8922A] text-[10px] font-bold flex items-center justify-center flex-shrink-0">
-                          {selectedInvoice.client_name.charAt(0)}
+                          {(selectedInvoice.client_name || "?").charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
                           <span className="text-[13px] font-medium text-[#1C1C1C]">INV-{selectedInvoice.invoice_number}</span>
@@ -275,8 +307,15 @@ export default function RecordPaymentModal({
                         />
                       </div>
                       <div className="max-h-48 overflow-y-auto">
-                        {filteredInvoices.length === 0 ? (
-                          <p className="text-[12px] text-[#9A8F82] text-center py-4">No unpaid invoices found</p>
+                        {loadingInv ? (
+                          <div className="flex items-center justify-center gap-2 py-6">
+                            <Loader2 size={16} className="animate-spin text-[#C8922A]" />
+                            <span className="text-[12px] text-[#9A8F82]">Loading invoices...</span>
+                          </div>
+                        ) : filteredInvoices.length === 0 ? (
+                          <p className="text-[12px] text-[#9A8F82] text-center py-4">
+                            No unpaid invoices found
+                          </p>
                         ) : (
                           filteredInvoices.map(inv => (
                             <button
@@ -287,12 +326,13 @@ export default function RecordPaymentModal({
                                 const bal = parseFloat(inv.balance_due || inv.grand_total || "0");
                                 setAmount(bal > 0 ? bal.toFixed(2) : "");
                                 setShowDropdown(false);
+                                setInvoiceSearch("");
                               }}
                               className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#FAF8F5] transition-colors text-left"
                             >
                               <div className="flex items-center gap-2 min-w-0">
                                 <div className="w-7 h-7 rounded-full bg-[#FDF3E3] text-[#C8922A] text-[10px] font-bold flex items-center justify-center flex-shrink-0">
-                                  {inv.client_name.charAt(0)}
+                                  {(inv.client_name || "?").charAt(0).toUpperCase()}
                                 </div>
                                 <div className="min-w-0">
                                   <p className="text-[12px] font-semibold text-[#1C1C1C]">INV-{inv.invoice_number}</p>
@@ -347,7 +387,7 @@ export default function RecordPaymentModal({
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[14px] font-semibold text-[#9A8F82]">₹</span>
                 <input
                   type="number"
-                  min="0"
+                  min="0.01"
                   step="0.01"
                   value={amount}
                   onChange={e => setAmount(e.target.value)}
@@ -428,7 +468,7 @@ export default function RecordPaymentModal({
             {/* Error */}
             {error && (
               <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-xl px-4 py-3 text-[12px] text-[#EF4444]">
-                {error}
+                ⚠ {error}
               </div>
             )}
           </div>

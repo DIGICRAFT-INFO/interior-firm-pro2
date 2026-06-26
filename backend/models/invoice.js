@@ -3,22 +3,24 @@ const { v4: uuidv4 } = require('uuid');
 
 const invoiceSchema = new mongoose.Schema(
   {
-    _id: { type: String, default: uuidv4 }, //
-    project: { type: String, ref: 'Project', required: true }, //
-    quotation: { type: String, ref: 'Quotation', default: null }, //
-    invoice_number: { type: String, required: true, unique: true }, //
+    _id: { type: String, default: uuidv4 },
+    project: { type: String, ref: 'Project', required: true },
+    quotation: { type: String, ref: 'Quotation', default: null },
+    invoice_number: { type: String, required: true, unique: true },
     invoice_type: { 
       type: String, 
       enum: ['full', 'advance', 'milestone', 'final'], 
       default: 'full' 
-    }, //
-    invoice_date: { type: Date, required: true }, //
-    due_date: { type: Date, required: true }, //
+    },
+    invoice_date: { type: Date, required: true },
+    due_date: { type: Date, required: true },
     status: { 
       type: String, 
+      // BUG FIX: Kept 'partial' as the canonical enum (not 'partially_paid')
+      // Frontend STATUS_CONFIG now maps both 'partial' and 'partially_paid'
       enum: ['draft', 'issued', 'partial', 'paid', 'overdue', 'cancelled'], 
       default: 'draft' 
-    }, //
+    },
     
     // Milestone billing
     milestone_label: { type: String, default: '' },
@@ -35,11 +37,11 @@ const invoiceSchema = new mongoose.Schema(
     amount_paid: { type: Number, default: 0 },
     balance_due: { type: Number, default: 0 },
     
-    notes: { type: String, default: '' }, //
+    notes: { type: String, default: '' },
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-    collection: 'invoices' //
+    collection: 'invoices'
   }
 );
 
@@ -50,27 +52,49 @@ invoiceSchema.virtual('items', {
   foreignField: 'invoice'
 });
 
-// Equivalent to Django's update_balance method
+// ── BUG FIX: update_balance ───────────────────────────────────────────────────
+// Original: this.save() inside update_balance() could trigger other save hooks
+// and cause loops. Fixed with updateOne() to bypass hooks.
 invoiceSchema.methods.update_balance = async function () {
   const PaymentRecord = mongoose.model('PaymentRecord');
   
   const result = await PaymentRecord.aggregate([
     { $match: { invoice: this._id } },
-    { $group: { _id: null, t: { $sum: '$amount_paid' } } }
+    { $group: { _id: null, total: { $sum: '$amount_paid' } } }
   ]);
   
-  const paid = result.length > 0 ? result[0].t : 0;
+  const paid = result.length > 0 ? result[0].total : 0;
+  const balance = this.grand_total - paid;
   
-  this.amount_paid = paid;
-  this.balance_due = this.grand_total - paid;
-  
-  if (this.balance_due <= 0) {
-    this.status = 'paid';
-  } else if (paid > 0) {
-    this.status = 'partial';
+  let newStatus = this.status;
+  // Only auto-update status if invoice is in a payment-trackable state
+  // Don't override 'cancelled' or 'draft'
+  if (['issued', 'partial', 'paid', 'overdue'].includes(this.status)) {
+    if (balance <= 0) {
+      newStatus = 'paid';
+    } else if (paid > 0) {
+      newStatus = 'partial';
+    } else {
+      newStatus = 'issued';
+    }
   }
   
-  await this.save();
+  // BUG FIX: Use updateOne() instead of this.save() to avoid recursive hook triggers
+  await mongoose.model('Invoice').updateOne(
+    { _id: this._id },
+    {
+      $set: {
+        amount_paid: paid,
+        balance_due: Math.max(0, balance),
+        status: newStatus,
+      }
+    }
+  );
+
+  // Keep local object in sync for callers that read properties after update_balance
+  this.amount_paid = paid;
+  this.balance_due = Math.max(0, balance);
+  this.status = newStatus;
 };
 
 invoiceSchema.set('toJSON', {

@@ -8,18 +8,32 @@ const inAppNotificationSchema = new mongoose.Schema(
     event_type: {
       type: String,
       enum: [
+        // Client
         'client_created',
+        // Invoice
         'invoice_created',
         'invoice_sent',
         'invoice_paid',
+        // Quotation
         'quotation_created',
         'quotation_approved',
         'quotation_rejected',
+        // Payment
         'payment_received',
+        // Proposal
         'proposal_created',
         'proposal_sent',
         'proposal_accepted',
-        'proposal_rejected'
+        'proposal_rejected',
+        // Project (BUG FIX: was missing)
+        'project_created',
+        'project_status_changed',
+        // Master Service (BUG FIX: was missing)
+        'service_created',
+        // Portfolio (BUG FIX: was missing)
+        'portfolio_created',
+        // Enquiry
+        'enquiry_received',
       ],
       required: true
     },
@@ -35,7 +49,6 @@ const inAppNotificationSchema = new mongoose.Schema(
   }
 );
 
-// Compound index for efficient queries
 inAppNotificationSchema.index({ user: 1, is_read: 1, created_at: -1 });
 
 inAppNotificationSchema.set('toJSON', {

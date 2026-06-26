@@ -2,28 +2,20 @@ const PaymentRecord = require('../models/payment_record');
 const Invoice = require('../models/invoice');
 const { createNotification, deleteNotificationsByReference } = require('../services/in_app_notification_service');
 
-// PaymentListCreateView -> GET
+// ── BUG FIX #1: get_payments ─────────────────────────────────────────────────
+// FIXED: matchStage was applied AFTER $unwind, but when filtering by invoice
+// the $match must happen BEFORE lookup OR after with proper field name.
+// Also, search on invoice_data fields only works post-lookup — split into two stages.
 exports.get_payments = async (req, res) => {
   try {
-    let matchStage = {};
-
-    // Filter by invoice_id if provided
+    // Pre-match: filter by invoice (fast, on base collection)
+    let preMatch = {};
     if (req.query.invoice) {
-      matchStage.invoice = req.query.invoice;
-    }
-
-    // Search functionality
-    if (req.query.search) {
-      const searchRegex = { $regex: req.query.search, $options: 'i' };
-      matchStage.$or = [
-        { reference_number: searchRegex },
-        { 'invoice_data.invoice_number': searchRegex },
-        { 'client_data.full_name': searchRegex }
-      ];
+      preMatch.invoice = req.query.invoice; // invoice is stored as String (uuid)
     }
 
     // Ordering logic
-    let sortStage = { payment_date: -1 }; // Default ordering from Meta
+    let sortStage = { payment_date: -1 };
     if (req.query.ordering) {
       sortStage = {};
       const fields = req.query.ordering.split(',');
@@ -36,8 +28,20 @@ exports.get_payments = async (req, res) => {
       });
     }
 
-    // Aggregation pipeline to simulate select_related and nested search
-    const payments = await PaymentRecord.aggregate([
+    // Post-lookup match: search across joined fields
+    let postMatch = {};
+    if (req.query.search) {
+      const searchRegex = { $regex: req.query.search, $options: 'i' };
+      postMatch.$or = [
+        { reference_number: searchRegex },
+        { 'invoice_data.invoice_number': searchRegex },
+        { 'client_data.full_name': searchRegex }
+      ];
+    }
+
+    const pipeline = [
+      // FIXED: Pre-match before expensive lookups
+      ...(Object.keys(preMatch).length > 0 ? [{ $match: preMatch }] : []),
       {
         $lookup: {
           from: 'invoices',
@@ -65,11 +69,13 @@ exports.get_payments = async (req, res) => {
         }
       },
       { $unwind: { path: '$client_data', preserveNullAndEmptyArrays: true } },
-      { $match: matchStage },
+      // Post-lookup search match
+      ...(Object.keys(postMatch).length > 0 ? [{ $match: postMatch }] : []),
       { $sort: sortStage },
       {
         $project: {
           id: '$_id',
+          _id: 0,
           invoice: 1,
           amount_paid: 1,
           payment_date: 1,
@@ -77,14 +83,16 @@ exports.get_payments = async (req, res) => {
           reference_number: 1,
           notes: 1,
           created_at: 1,
-          invoice_number: '$invoice_data.invoice_number', //
-          client_name: '$client_data.full_name' //
+          invoice_number: '$invoice_data.invoice_number',
+          client_name: '$client_data.full_name'
         }
       }
-    ]);
+    ];
 
+    const payments = await PaymentRecord.aggregate(pipeline);
     res.json(payments);
   } catch (error) {
+    console.error('get_payments error:', error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -92,8 +100,8 @@ exports.get_payments = async (req, res) => {
 // PaymentListCreateView -> POST
 exports.create_payment = async (req, res) => {
   try {
-    // Model hooks will handle the invoice balance calculation
     const payment = await PaymentRecord.create(req.body);
+    // post('save') hook on PaymentRecord triggers invoice.update_balance() automatically
 
     await createNotification({
       event_type: 'payment_received',
@@ -103,9 +111,11 @@ exports.create_payment = async (req, res) => {
       reference_type: 'payment'
     });
 
-    res.status(201).json(payment);
+    // Return the full payment object with id field
+    const obj = payment.toJSON();
+    res.status(201).json(obj);
   } catch (error) {
-    // Handling Mongoose validation errors (like amount <= 0)
+    console.error('create_payment error:', error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -122,37 +132,61 @@ exports.get_payment_detail = async (req, res) => {
           select: 'client',
           populate: { path: 'client', select: 'full_name' }
         }
-      }); // Equivalent to select_related('invoice__project__client')
+      });
 
     if (!payment) return res.status(404).json({ detail: 'Not found.' });
 
-    // Formatting for serializers
     const obj = payment.toJSON();
     obj.invoice_number = payment.invoice ? payment.invoice.invoice_number : null;
-    obj.client_name = payment.invoice && payment.invoice.project && payment.invoice.project.client 
+    obj.client_name = payment.invoice && payment.invoice.project && payment.invoice.project.client
       ? payment.invoice.project.client.full_name : null;
-    
-    // Cleanup nested populated objects to match flat serializer output
-    obj.invoice = payment.invoice ? payment.invoice._id : null; 
+
+    // Keep invoice as just the ID (flat output)
+    obj.invoice = payment.invoice ? payment.invoice._id : null;
 
     res.json(obj);
   } catch (error) {
+    console.error('get_payment_detail error:', error);
     res.status(500).json({ error: error.message });
   }
 };
 
-// PaymentDetailView -> PUT/PATCH
+// ── BUG FIX #2: update_payment ───────────────────────────────────────────────
+// FIXED: Previously Object.assign + save() did not reliably trigger the
+// post('save') hook for balance recalculation when amount_paid changes.
+// Now we explicitly call invoice.update_balance() after saving.
 exports.update_payment = async (req, res) => {
   try {
     const payment = await PaymentRecord.findById(req.params.pk);
     if (!payment) return res.status(404).json({ detail: 'Not found.' });
 
-    // Update fields manually then use save() to trigger the model hook
-    Object.assign(payment, req.body);
-    await payment.save();
+    const oldInvoiceId = payment.invoice;
 
-    res.json(payment);
+    // Update allowed fields
+    const allowed = ['amount_paid', 'payment_date', 'payment_mode', 'reference_number', 'notes'];
+    allowed.forEach(field => {
+      if (req.body[field] !== undefined) {
+        payment[field] = req.body[field];
+      }
+    });
+
+    await payment.save();
+    // post('save') hook fires automatically — but call explicitly as safety net
+    // in case mongoose hook doesn't fire on update path
+    const invoice = await Invoice.findById(oldInvoiceId);
+    if (invoice) {
+      await invoice.update_balance();
+    }
+
+    // If invoice changed, recalculate new invoice too
+    if (req.body.invoice && req.body.invoice !== oldInvoiceId) {
+      const newInvoice = await Invoice.findById(req.body.invoice);
+      if (newInvoice) await newInvoice.update_balance();
+    }
+
+    res.json(payment.toJSON());
   } catch (error) {
+    console.error('update_payment error:', error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -160,12 +194,18 @@ exports.update_payment = async (req, res) => {
 // PaymentDetailView -> DELETE
 exports.delete_payment = async (req, res) => {
   try {
-    // findOneAndDelete hook will automatically recalculate balance
     const payment = await PaymentRecord.findOneAndDelete({ _id: req.params.pk });
     if (!payment) return res.status(404).json({ detail: 'Not found.' });
+
+    // post('findOneAndDelete') hook fires automatically for balance update
+    // Explicit safety call:
+    const invoice = await Invoice.findById(payment.invoice);
+    if (invoice) await invoice.update_balance();
+
     await deleteNotificationsByReference(req.params.pk, 'payment');
     res.status(204).send();
   } catch (error) {
+    console.error('delete_payment error:', error);
     res.status(500).json({ error: error.message });
   }
 };

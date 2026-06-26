@@ -28,7 +28,7 @@ import { getAllInvoices, sendReminder } from "@/services/invoiceService";
 
 function getToken() {
   return typeof window !== "undefined"
-    ? localStorage.getItem("access_token")
+    ? localStorage.getItem("access") || localStorage.getItem("access_token") || localStorage.getItem("token")
     : "";
 }
 
@@ -70,6 +70,8 @@ const STATUS_CONFIG: Record<
   { label: string; color: string; bg: string }
 > = {
   paid: { label: "Paid", color: "#10B981", bg: "#ECFDF5" },
+  // BUG FIX: Backend enum is "partial" not "partially_paid" — keep both for safety
+  partial: { label: "Partial", color: "#F59E0B", bg: "#FFFBEB" },
   partially_paid: { label: "Partial", color: "#F59E0B", bg: "#FFFBEB" },
   issued: { label: "Issued", color: "#3B82F6", bg: "#EFF6FF" },
   overdue: { label: "Overdue", color: "#EF4444", bg: "#FEF2F2" },
@@ -77,7 +79,7 @@ const STATUS_CONFIG: Record<
   cancelled: { label: "Cancelled", color: "#6B7280", bg: "#F3F4F6" },
 };
 
-type FilterStatus = "all" | "paid" | "partially_paid" | "issued" | "overdue";
+type FilterStatus = "all" | "paid" | "partial" | "issued" | "overdue";
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -118,7 +120,7 @@ export default function PaymentsPage() {
       inv.invoice_number.toLowerCase().includes(search.toLowerCase()) ||
       (inv.client_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
       inv.project_name?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = filterStatus === "all" || inv.status === filterStatus;
+    const matchStatus = filterStatus === "all" || inv.status === filterStatus || (filterStatus === "partial" && inv.status === "partially_paid");
     return matchSearch && matchStatus;
   });
 
@@ -257,7 +259,7 @@ export default function PaymentsPage() {
             [
               "all",
               "overdue",
-              "partially_paid",
+              "partial",
               "issued",
               "paid",
             ] as FilterStatus[]
@@ -275,7 +277,7 @@ export default function PaymentsPage() {
                 ? "All"
                 : s === "overdue"
                   ? "Overdue"
-                  : s === "partially_paid"
+                  : s === "partial"
                     ? "Partial"
                     : s === "issued"
                       ? "Issued"

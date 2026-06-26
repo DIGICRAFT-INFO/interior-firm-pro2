@@ -7,7 +7,6 @@ exports.getNotifications = async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
-    // Build filter: notifications where user is null (visible to all) OR user matches current user
     const filter = {
       $or: [
         { user: null },
@@ -15,10 +14,19 @@ exports.getNotifications = async (req, res) => {
       ]
     };
 
-    // Optional filters
-    if (req.query.event_type) {
-      filter.event_type = req.query.event_type;
+    // BUG FIX: Accept both ?event_type= (direct) and ?type= (group prefix from frontend)
+    const typeParam = req.query.event_type || req.query.type;
+    if (typeParam) {
+      const GROUP_PREFIXES = ['invoice', 'quotation', 'proposal', 'project', 'service', 'portfolio', 'enquiry'];
+      if (GROUP_PREFIXES.includes(typeParam)) {
+        // Group filter — match all event_types that start with the prefix
+        filter.event_type = { $regex: `^${typeParam}`, $options: 'i' };
+      } else {
+        // Exact match (e.g. client_created, payment_received)
+        filter.event_type = typeParam;
+      }
     }
+
     if (req.query.is_read !== undefined) {
       filter.is_read = req.query.is_read === 'true';
     }
@@ -31,37 +39,31 @@ exports.getNotifications = async (req, res) => {
       InAppNotification.countDocuments(filter)
     ]);
 
-    const totalPages = Math.ceil(total / limit);
-
     res.json({
       notifications,
       total,
       page,
-      totalPages
+      totalPages: Math.ceil(total / limit)
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// GET /unread-count — Get unread count for current user
+// GET /unread-count
 exports.getUnreadCount = async (req, res) => {
   try {
     const count = await InAppNotification.countDocuments({
-      $or: [
-        { user: null },
-        { user: req.user._id }
-      ],
+      $or: [{ user: null }, { user: req.user._id }],
       is_read: false
     });
-
     res.json({ count });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// PATCH /:pk/read — Mark single notification as read
+// PATCH /:pk/read
 exports.markAsRead = async (req, res) => {
   try {
     const notification = await InAppNotification.findByIdAndUpdate(
@@ -69,32 +71,34 @@ exports.markAsRead = async (req, res) => {
       { is_read: true },
       { new: true }
     );
-
-    if (!notification) {
-      return res.status(404).json({ detail: 'Not found.' });
-    }
-
+    if (!notification) return res.status(404).json({ detail: 'Not found.' });
     res.json(notification);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// PATCH /mark-all-read — Mark all notifications as read for current user
+// PATCH /mark-all-read
 exports.markAllAsRead = async (req, res) => {
   try {
     const result = await InAppNotification.updateMany(
       {
-        $or: [
-          { user: null },
-          { user: req.user._id }
-        ],
+        $or: [{ user: null }, { user: req.user._id }],
         is_read: false
       },
       { is_read: true }
     );
-
     res.json({ modified_count: result.modifiedCount });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// DELETE /:pk  (admin utility to delete single notification)
+exports.deleteNotification = async (req, res) => {
+  try {
+    await InAppNotification.findByIdAndDelete(req.params.pk);
+    res.status(204).send();
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -159,13 +159,33 @@ export async function deleteInvoice(id: string): Promise<void> {
 // ─── POST: Mark as sent ───────────────────────────────────────────────────────
 
 export async function sendInvoice(id: string): Promise<Invoice> {
-  return updateInvoice(id, { status: "issued" } as any);
+  // BUG FIX: Use dedicated POST /:pk/send/ endpoint which validates draft→issued transition
+  const res = await fetch(`${INVOICES_URL}${id}/send/`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+  });
+  handleUnauthorized(res.status);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw err;
+  }
+  return res.json() as Promise<Invoice>;
 }
 
 // ─── POST: Mark as paid ───────────────────────────────────────────────────────
 
 export async function markInvoicePaid(id: string): Promise<Invoice> {
-  return updateInvoice(id, { status: "paid" } as any);
+  // BUG FIX: Use dedicated POST /:pk/mark_paid/ endpoint
+  const res = await fetch(`${INVOICES_URL}${id}/mark_paid/`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+  });
+  handleUnauthorized(res.status);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw err;
+  }
+  return res.json() as Promise<Invoice>;
 }
 
 // ─── GET: Download PDF (auth header required) ────────────────────────────────

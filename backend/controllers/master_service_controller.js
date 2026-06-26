@@ -1,75 +1,43 @@
-const path = require('path');
-const fs = require('fs');
-const multer = require('multer');
 const MasterService = require('../models/master_service');
-const ServiceAssignment = require('../models/service_assignment');
+const ServiceMedia = require('../models/master_service');
+const multer = require('multer');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
+const { createNotification, deleteNotificationsByReference } = require('../services/in_app_notification_service');
 
-// --- Multer Configuration ---
-const uploadsDir = path.join(__dirname, '..', 'uploads', 'services');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
+// ─── File upload config ───────────────────────────────────────────────────────
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
+  destination: (req, file, cb) => cb(null, 'uploads/services/'),
   filename: (req, file, cb) => {
-    const datePrefix = Date.now();
-    const sanitized = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-    cb(null, `${datePrefix}-${sanitized}`);
-  },
-});
-
-const allowedMimeTypes = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'video/mp4',
-  'video/quicktime',
-  'application/pdf',
-];
-
-const fileFilter = (req, file, cb) => {
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`Invalid file type: ${file.mimetype}. Allowed types: jpeg, png, webp, mp4, mov, pdf.`), false);
+    const ext = path.extname(file.originalname);
+    cb(null, `${uuidv4()}${ext}`);
   }
-};
+});
 
 const upload = multer({
   storage,
-  fileFilter,
-  limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB
-    files: 10,
-  },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    const allowed = /jpeg|jpg|png|gif|webp|mp4|mov|avi/;
+    const ext = allowed.test(path.extname(file.originalname).toLowerCase());
+    const mime = allowed.test(file.mimetype);
+    if (ext && mime) return cb(null, true);
+    cb(new Error('Only images and videos are allowed.'));
+  }
 });
 
-// Export multer middleware for use in routes
-exports.upload = upload;
+exports.uploadMiddleware = upload.array('files', 10);
 
-// --- Controller Functions ---
-
-// GET /api/v1/services
-// List all services. Returns only active services by default; admins can see all.
-exports.list_services = async (req, res) => {
+// ── GET /  ────────────────────────────────────────────────────────────────────
+exports.get_services = async (req, res) => {
   try {
-    const filter = {};
-    // If user is owner or manager, allow filtering by status query param
-    if (req.user && req.user.is_manager_or_above && req.query.status) {
-      filter.status = req.query.status;
-    } else if (!(req.user && req.user.is_manager_or_above)) {
-      // Non-admin users only see active services
-      filter.status = 'active';
-    } else {
-      // Admin with no status filter sees all
-    }
+    let query = {};
+    if (req.query.status) query.status = req.query.status;
+    if (req.query.search) query.name = { $regex: req.query.search, $options: 'i' };
 
-    const services = await MasterService.find(filter)
-      .populate('created_by', 'full_name email')
-      .sort({ created_at: -1 });
+    const services = await MasterService.find(query)
+      .populate('media')
+      .sort('-created_at');
 
     res.json(services);
   } catch (error) {
@@ -77,235 +45,112 @@ exports.list_services = async (req, res) => {
   }
 };
 
-// GET /api/v1/services/:id
-// Get a single service by ID, populate created_by
-exports.get_service = async (req, res) => {
+// ── GET /:id  ─────────────────────────────────────────────────────────────────
+exports.get_service_detail = async (req, res) => {
   try {
-    const service = await MasterService.findById(req.params.id)
-      .populate('created_by', 'full_name email');
-
-    if (!service) {
-      return res.status(404).json({ error: 'Service not found.' });
-    }
-
+    const service = await MasterService.findById(req.params.id).populate('media');
+    if (!service) return res.status(404).json({ detail: 'Not found.' });
     res.json(service);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// POST /api/v1/services
-// Create a new service. Requires name and description.
+// ── POST /  ───────────────────────────────────────────────────────────────────
 exports.create_service = async (req, res) => {
   try {
-    const { name, description } = req.body;
-
-    if (!name || !description) {
-      return res.status(400).json({ error: 'Name and description are required.' });
-    }
-
     const service = await MasterService.create({
-      name,
-      description,
-      created_by: req.user._id,
+      name: req.body.name,
+      description: req.body.description,
+      status: req.body.status || 'active',
+      created_by: req.user ? req.user._id : null
     });
 
-    res.status(201).json(service);
+    await createNotification({
+      event_type: 'service_created',
+      title: 'New Service Added',
+      message: `Master service "${service.name}" has been created`,
+      reference_id: service._id,
+      reference_type: 'service'
+    });
+
+    const withMedia = await MasterService.findById(service._id).populate('media');
+    res.status(201).json(withMedia);
   } catch (error) {
-    let errorMsg = error.message;
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors || {}).map((e) => e.message);
-      errorMsg = messages.join(', ') || error.message;
-    }
-    res.status(400).json({ error: errorMsg });
+    res.status(400).json({ error: error.message });
   }
 };
 
-// PUT /api/v1/services/:id
-// Update service name, description, and/or status
+// ── PUT /:id  — BUG FIX: Frontend was sending PATCH but route only had PUT
+// Fixed: route file now supports both PUT and PATCH ─────────────────────────
 exports.update_service = async (req, res) => {
   try {
     const service = await MasterService.findById(req.params.id);
-    if (!service) {
-      return res.status(404).json({ error: 'Service not found.' });
-    }
+    if (!service) return res.status(404).json({ detail: 'Not found.' });
 
-    const { name, description, status } = req.body;
-    if (name !== undefined) service.name = name;
-    if (description !== undefined) service.description = description;
-    if (status !== undefined) service.status = status;
-
+    const allowed = ['name', 'description', 'status'];
+    allowed.forEach(f => {
+      if (req.body[f] !== undefined) service[f] = req.body[f];
+    });
     await service.save();
-    res.json(service);
+
+    const withMedia = await MasterService.findById(service._id).populate('media');
+    res.json(withMedia);
   } catch (error) {
-    let errorMsg = error.message;
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors || {}).map((e) => e.message);
-      errorMsg = messages.join(', ') || error.message;
-    }
-    res.status(400).json({ error: errorMsg });
+    res.status(400).json({ error: error.message });
   }
 };
 
-// DELETE /api/v1/services/:id
-// Soft-delete: set status to 'inactive'
+// ── DELETE /:id  ──────────────────────────────────────────────────────────────
 exports.delete_service = async (req, res) => {
   try {
-    const service = await MasterService.findById(req.params.id);
-    if (!service) {
-      return res.status(404).json({ error: 'Service not found.' });
-    }
+    const service = await MasterService.findByIdAndDelete(req.params.id);
+    if (!service) return res.status(404).json({ detail: 'Not found.' });
 
-    service.status = 'inactive';
-    await service.save();
-    res.json({ message: 'Service deleted (deactivated) successfully.' });
+    // Also delete associated media records
+    await ServiceMedia.deleteMany({ service: req.params.id });
+    await deleteNotificationsByReference(req.params.id, 'service');
+
+    res.status(204).send();
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// POST /api/v1/services/:id/media
-// Upload media files to a service (max 10 files, 50MB each)
+// ── POST /:id/media/  — Upload media files ───────────────────────────────────
 exports.upload_media = async (req, res) => {
   try {
     const service = await MasterService.findById(req.params.id);
-    if (!service) {
-      return res.status(404).json({ error: 'Service not found.' });
-    }
+    if (!service) return res.status(404).json({ detail: 'Not found.' });
 
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded.' });
     }
 
-    const mediaEntries = req.files.map((file) => {
-      let file_type = 'image';
-      if (file.mimetype === 'video/mp4' || file.mimetype === 'video/quicktime') {
-        file_type = 'video';
-      } else if (file.mimetype === 'application/pdf') {
-        file_type = 'pdf';
-      }
+    const mediaRecords = req.files.map(file => ({
+      service: service._id,
+      file_url: `/uploads/services/${file.filename}`,
+      file_type: file.mimetype.startsWith('video') ? 'video' : 'image',
+      file_size: file.size,
+      original_filename: file.originalname
+    }));
 
-      return {
-        file_url: `/uploads/services/${file.filename}`,
-        file_type,
-        file_size: file.size,
-        original_filename: file.originalname,
-      };
-    });
-
-    service.media.push(...mediaEntries);
-    await service.save();
-
-    res.status(201).json(service);
+    const created = await ServiceMedia.insertMany(mediaRecords);
+    res.status(201).json(created);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(500).json({ error: error.message });
   }
 };
 
-// DELETE /api/v1/services/:id/media/:mediaId
-// Remove a single media entry from the service's media array
+// ── DELETE /:id/media/:mediaId/  — Remove a single media file ────────────────
 exports.delete_media = async (req, res) => {
   try {
-    const service = await MasterService.findById(req.params.id);
-    if (!service) {
-      return res.status(404).json({ error: 'Service not found.' });
-    }
-
-    const mediaItem = service.media.id(req.params.mediaId);
-    if (!mediaItem) {
-      return res.status(404).json({ error: 'Media not found.' });
-    }
-
-    // Attempt to delete the physical file
-    const filePath = path.join(__dirname, '..', mediaItem.file_url);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-
-    service.media.pull({ _id: req.params.mediaId });
-    await service.save();
-
-    res.json({ message: 'Media deleted successfully.' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// POST /api/v1/services/:id/assign
-// Assign a service to a client
-exports.assign_service = async (req, res) => {
-  try {
-    const { client_id } = req.body;
-
-    if (!client_id) {
-      return res.status(400).json({ error: 'client_id is required.' });
-    }
-
-    const service = await MasterService.findById(req.params.id);
-    if (!service) {
-      return res.status(404).json({ error: 'Service not found.' });
-    }
-
-    const assignment = await ServiceAssignment.create({
-      service: req.params.id,
-      client: client_id,
-      assigned_by: req.user._id,
+    const media = await ServiceMedia.findOneAndDelete({
+      _id: req.params.mediaId,
+      service: req.params.id
     });
-
-    res.status(201).json(assignment);
-  } catch (error) {
-    // Handle duplicate assignment (compound unique index violation)
-    if (error.code === 11000) {
-      return res.status(400).json({ error: 'Service is already assigned to this client.' });
-    }
-    res.status(400).json({ error: error.message });
-  }
-};
-
-// DELETE /api/v1/services/:id/assign/:clientId
-// Remove a service assignment for a specific client
-exports.unassign_service = async (req, res) => {
-  try {
-    const assignment = await ServiceAssignment.findOneAndDelete({
-      service: req.params.id,
-      client: req.params.clientId,
-    });
-
-    if (!assignment) {
-      return res.status(404).json({ error: 'Assignment not found.' });
-    }
-
-    res.json({ message: 'Service unassigned successfully.' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// GET /api/v1/services/:id/assignments
-// Get all assignments for a service, populate client
-exports.get_service_assignments = async (req, res) => {
-  try {
-    const assignments = await ServiceAssignment.find({ service: req.params.id })
-      .populate('client', 'full_name email phone')
-      .populate('assigned_by', 'full_name email')
-      .sort({ assigned_at: -1 });
-
-    res.json(assignments);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// GET /api/v1/clients/:clientId/services
-// Get all service assignments for a client, populate service
-exports.get_client_services = async (req, res) => {
-  try {
-    const assignments = await ServiceAssignment.find({ client: req.params.clientId })
-      .populate('service')
-      .populate('assigned_by', 'full_name email')
-      .sort({ assigned_at: -1 });
-
-    res.json(assignments);
+    if (!media) return res.status(404).json({ detail: 'Media not found.' });
+    res.status(204).send();
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
