@@ -48,7 +48,7 @@ function LoginContent() {
       <div className="w-full max-w-md">
         {/* Logo / Header */}
         <div className="text-center mb-10">
-          <img src="/logo.png" alt="InteriorBill" className="mx-auto w-36 h-34 rounded-2xl mb-4 shadow-lg shadow-[#C8922A]/30 object-contain" />
+          <img src="/logo2.png" alt="InteriorBill" className="mx-auto w-36 h-34 rounded-2xl mb-4 shadow-lg shadow-[#C8922A]/30 object-contain" />
           <h1 className="text-2xl font-black text-[#1C1C1C]">Welcome back</h1>
           <p className="text-[#9A8F82] text-sm mt-1">
             Sign in to your InteriorBill account

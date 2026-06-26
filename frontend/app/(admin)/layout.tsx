@@ -176,7 +176,7 @@ export default function DashboardLayout({
         <div className="px-5 py-5 border-b border-[#EDE8DF] flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img 
-              src="/logo.png" 
+              src="/logo2.png" 
               alt="Logo" 
               className="rounded-lg object-contain" 
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} 
