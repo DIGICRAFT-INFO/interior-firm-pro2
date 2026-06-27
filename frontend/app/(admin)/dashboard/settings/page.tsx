@@ -482,7 +482,7 @@ interface LineItem {
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ||
-  "https://interior-firm-crm-be.onrender.com/api/v1";
+  "https://interior-firm-pro2.onrender.com/api/v1";
 
 function getAuthHeaders(): HeadersInit {
   if (typeof window === "undefined")

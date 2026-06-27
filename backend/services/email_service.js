@@ -39,7 +39,62 @@ exports.send_invoice_email = async (invoice) => {
     return { success: false, error: error.message };
   }
 };
+exports.send_quotation_email = async (quotation) => {
+  const client = quotation.project.client;
+  if (!client.email) return { success: false, error: "Client email not set" };
 
+  try {
+    await transporter.sendMail({
+      from: process.env.DEFAULT_FROM_EMAIL || `Elegance Interiors <${process.env.EMAIL_HOST_USER}>`,
+      to: client.email,
+      subject: `Quotation ${quotation.quote_number} — ${firm_name()}`,
+      html: `<p>Please find your quotation ${quotation.quote_number} here: ${process.env.BACKEND_URL}/api/v1/quotations/${quotation._id}/pdf/</p>`,
+    });
+    await log_notification("email", "quotation", quotation._id, client.email, "sent");
+    return { success: true };
+  } catch (error) {
+    await log_notification("email", "quotation", quotation._id, client.email, "failed", error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+exports.send_proposal_email = async (proposal) => {
+  const client = proposal.project.client;
+  if (!client.email) return { success: false, error: "Client email not set" };
+
+  try {
+    await transporter.sendMail({
+      from: process.env.DEFAULT_FROM_EMAIL || `Elegance Interiors <${process.env.EMAIL_HOST_USER}>`,
+      to: client.email,
+      subject: `Proposal: ${proposal.title} — ${firm_name()}`,
+      html: `<p>Please review your proposal <strong>${proposal.title}</strong> here: ${process.env.BACKEND_URL}/api/v1/proposals/${proposal._id}/pdf/</p>`,
+    });
+    await log_notification("email", "proposal", proposal._id, client.email, "sent");
+    return { success: true };
+  } catch (error) {
+    await log_notification("email", "proposal", proposal._id, client.email, "failed", error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+exports.send_payment_reminder_email = async (invoice) => {
+  const client = invoice.project.client;
+  if (!client.email) return { success: false, error: "Client email not set" };
+
+  try {
+    await transporter.sendMail({
+      from: process.env.DEFAULT_FROM_EMAIL || `Elegance Interiors <${process.env.EMAIL_HOST_USER}>`,
+      to: client.email,
+      subject: `Payment Reminder: Invoice ${invoice.invoice_number} — ${firm_name()}`,
+      html: `<p>This is a reminder that Invoice ${invoice.invoice_number} is due. Please make payment at your earliest convenience.</p>`,
+    });
+    await log_notification("email", "invoice", invoice._id, client.email, "sent");
+    return { success: true };
+  } catch (error) {
+    await log_notification("email", "invoice", invoice._id, client.email, "failed", error.message);
+    return { success: false, error: error.message };
+  }
+};
 // ... Similar functions for send_quotation_email, send_payment_reminder_email, and send_proposal_email map exactly like above using transporter.sendMail() ...
 
 // 2. Send Portfolio Email (with PDF attachment + inline image links)

@@ -17,6 +17,16 @@ exports.whatsapp_webhook_verify = (req, res) => {
   return res.status(403).send("Verification failed");
 };
 
+exports.send_proposal_email = async (req, res) => {
+  const proposal = await Proposal.findById(req.params.pk)
+    .populate({ path: 'project', populate: { path: 'client' } });
+  if (!proposal) return res.status(404).json({ detail: 'Proposal not found.' });
+
+  const result = await emailService.send_proposal_email(proposal);
+  if (result.success) return res.json({ detail: 'Proposal sent via Email.' });
+  return res.status(400).json({ detail: result.error });
+};
+
 exports.whatsapp_webhook_receive = async (req, res) => {
   try {
     const data = req.body;

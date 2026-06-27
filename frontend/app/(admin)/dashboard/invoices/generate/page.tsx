@@ -31,7 +31,7 @@
 //   const handleGenerate = async () => {
 //     setLoading(true);
 //     try {
-//       const response = await fetch("https://interior-firm-crm-be.onrender.com/api/v1//invoices/", {
+//       const response = await fetch("https://interior-firm-pro2.onrender.com/api/v1//invoices/", {
 //         method: "POST",
 //         headers: { "Content-Type": "application/json" },
 //         body: JSON.stringify({
@@ -188,7 +188,7 @@ function getAuthHeaders(): HeadersInit {
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ||
-  "https://interior-firm-crm-be.onrender.com/api/v1";
+  "https://interior-firm-pro2.onrender.com/api/v1";
 
 // ─── Fmt ──────────────────────────────────────────────────────────────────────
 const fmt = (n: any) =>

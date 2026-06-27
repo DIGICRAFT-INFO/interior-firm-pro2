@@ -9,7 +9,16 @@ const { is_authenticated, is_manager_or_above, is_finance_or_above } = require('
 router.route('/whatsapp/webhook/')
   .get(ctrl.whatsapp_webhook_verify) // allow_any
   .post(ctrl.whatsapp_webhook_receive);
-
+// Add these two lines:
+router.post('/email/proposal/:pk/send/', is_authenticated, is_manager_or_above, ctrl.send_proposal_email);
+router.post('/email/invoice/:pk/send/', is_authenticated, is_finance_or_above, ctrl.send_invoice_email);
+router.post('/email/quotation/:pk/send/', is_authenticated, is_manager_or_above, ctrl.send_quotation_email);
+// Add these after the existing WhatsApp routes:
+router.post('/email/invoice/:pk/send/',    is_authenticated, is_finance_or_above,  ctrl.send_invoice_email);
+router.post('/email/quotation/:pk/send/',  is_authenticated, is_manager_or_above,  ctrl.send_quotation_email);
+router.post('/email/proposal/:pk/send/',   is_authenticated, is_manager_or_above,  ctrl.send_proposal_email);
+// Also fix the WhatsApp routes to match the /whatsapp/proposal/ pattern the frontend already uses:
+// (these already exist with the right paths — no change needed there)
 // -------------------------------------------------------------
 // Send via WhatsApp
 // -------------------------------------------------------------
