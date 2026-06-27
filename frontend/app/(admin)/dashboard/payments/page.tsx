@@ -350,16 +350,16 @@ export default function PaymentsPage() {
                       {/* Invoice # — click to open detail page */}
                       <td className="px-5 py-4">
                         <button
-                          onClick={() => router.push(`/invoices/${inv.id}`)}
+                          // onClick={() => router.push(`/invoices/${inv.id}`)}
                           className="flex items-center gap-1.5 group"
                         >
                           <span className="text-[12px] font-mono font-semibold text-[#6B6259] group-hover:text-[#C8922A] transition-colors">
                             INV-{inv.invoice_number}
                           </span>
-                          <ExternalLink
+                          {/* <ExternalLink
                             size={10}
                             className="text-[#9A8F82] opacity-0 group-hover:opacity-100 transition-opacity"
-                          />
+                          /> */}
                         </button>
                         {isOverdue && (
                           <span className="mt-1 inline-block text-[10px] bg-[#FEF2F2] text-[#EF4444] px-1.5 py-0.5 rounded font-bold">
