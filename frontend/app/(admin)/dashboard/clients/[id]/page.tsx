@@ -1293,9 +1293,9 @@ const payload = {
               <h1 className="text-xl font-bold text-[#1C1C1C]">
                 {client.full_name}
               </h1>
-              <span className="text-[11px] font-bold px-2 py-0.5 mt-2 rounded-full uppercase bg-green-50 text-green-600 border border-green-100">
+              {/* <span className="text-[11px] font-bold px-2 py-0.5 mt-2 rounded-full uppercase bg-green-50 text-green-600 border border-green-100">
                 Active Client
-              </span>
+              </span> */}
             </div>
 
             <div className="pt-6 space-y-5">

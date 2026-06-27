@@ -404,12 +404,13 @@ function CreatePortfolioModal({
   projects: Project[];
   creating: boolean;
   onClose: () => void;
-  onCreate: (payload: { title: string; description: string; category: PortfolioCategory; project: string }) => void;
+  onCreate: (payload: { title: string; description: string; category: PortfolioCategory; project: string; custom_category?: string }) => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<PortfolioCategory>("other");
   const [project, setProject] = useState("");
+  const [customCategory, setCustomCategory] = useState("");
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -435,7 +436,10 @@ function CreatePortfolioModal({
               <label className="text-[12px] font-medium text-[#6B6259]">Category</label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as PortfolioCategory)}
+                onChange={(e) => {
+                  setCategory(e.target.value as PortfolioCategory);
+                  if (e.target.value !== "other") setCustomCategory("");
+                }}
                 className="w-full mt-1 px-3 py-2 text-[13px] border border-[#EDE8DF] rounded-lg outline-none focus:border-[#C8922A] bg-white"
               >
                 {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
@@ -458,6 +462,21 @@ function CreatePortfolioModal({
             </div>
           </div>
 
+          {/* Custom category input — sirf "Other" select hone par dikhega */}
+          {category === "other" && (
+            <div>
+              <label className="text-[12px] font-medium text-[#6B6259]">
+                Custom Category Name <span className="text-[#9A8F82] font-normal">(optional)</span>
+              </label>
+              <input
+                value={customCategory}
+                onChange={(e) => setCustomCategory(e.target.value)}
+                placeholder="e.g. Terrace, Balcony, Kids Room..."
+                className="w-full mt-1 px-3 py-2 text-[13px] border border-[#EDE8DF] rounded-lg outline-none focus:border-[#C8922A]"
+              />
+            </div>
+          )}
+
           <div>
             <label className="text-[12px] font-medium text-[#6B6259]">Description</label>
             <textarea
@@ -476,7 +495,13 @@ function CreatePortfolioModal({
           </button>
           <button
             disabled={!title.trim() || creating}
-            onClick={() => onCreate({ title: title.trim(), description, category, project })}
+            onClick={() => onCreate({
+              title: title.trim(),
+              description,
+              category,
+              project,
+              ...(category === "other" && customCategory.trim() ? { custom_category: customCategory.trim() } : {}),
+            })}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-semibold text-white bg-[#C8922A] hover:bg-[#B07A20] disabled:opacity-50 rounded-lg"
           >
             {creating && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Create
