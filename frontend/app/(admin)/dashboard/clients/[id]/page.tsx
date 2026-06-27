@@ -1296,7 +1296,7 @@ const payload = {
               {/* <span className="text-[11px] font-bold px-2 py-0.5 mt-2 rounded-full uppercase bg-green-50 text-green-600 border border-green-100">
                 Active Client
               </span> */}
-            </div>
+            </div>  
 
             <div className="pt-6 space-y-5">
               {[
@@ -4161,76 +4161,76 @@ function AssignedServicesSection({ clientId }: { clientId: string }) {
     fetchServices();
   }, [fetchServices]);
 
-  return (
-    <div className="mt-8">
-      <div className="bg-white rounded-2xl border border-[#EDE8DF] overflow-hidden shadow-sm">
-        <div className="px-6 py-4 bg-[#FAF8F5] border-b border-[#EDE8DF] flex items-center gap-2">
-          <Layers size={14} className="text-[#C8922A]" />
-          <h3 className="text-[12px] font-bold text-[#6B6259] uppercase tracking-widest">
-            Assigned Services
-          </h3>
-          <span className="ml-auto text-[11px] bg-[#FDF3E3] text-[#C8922A] font-bold px-2 py-0.5 rounded-full">
-            {services.length}
-          </span>
-        </div>
+  // return (
+  //   <div className="mt-8">
+  //     <div className="bg-white rounded-2xl border border-[#EDE8DF] overflow-hidden shadow-sm">
+  //       <div className="px-6 py-4 bg-[#FAF8F5] border-b border-[#EDE8DF] flex items-center gap-2">
+  //         <Layers size={14} className="text-[#C8922A]" />
+  //         <h3 className="text-[12px] font-bold text-[#6B6259] uppercase tracking-widest">
+  //           Assigned Services
+  //         </h3>
+  //         <span className="ml-auto text-[11px] bg-[#FDF3E3] text-[#C8922A] font-bold px-2 py-0.5 rounded-full">
+  //           {services.length}
+  //         </span>
+  //       </div>
 
-        {loading ? (
-          <div className="flex justify-center py-10">
-            <Loader2 className="animate-spin text-[#C8922A]" size={22} />
-          </div>
-        ) : error ? (
-          <div className="p-6 text-center">
-            <p className="text-red-500 text-[13px] mb-3">{error}</p>
-            <button
-              onClick={fetchServices}
-              className="text-[12px] font-semibold text-[#C8922A] hover:underline"
-            >
-              Retry
-            </button>
-          </div>
-        ) : services.length === 0 ? (
-          <div className="p-10 text-center text-[#9A8F82] text-[13px]">
-            No services assigned to this client yet.
-          </div>
-        ) : (
-          <div className="divide-y divide-[#F5F2ED]">
-            {services.map((svc: any) => (
-              <div
-                key={svc.id || svc._id}
-                className="px-6 py-4 flex items-center gap-4 hover:bg-[#FAF8F5] transition-colors"
-              >
-                <div className="w-10 h-10 bg-[#FDF3E3] rounded-xl flex items-center justify-center text-[#C8922A]">
-                  <Layers size={16} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-bold text-[#1C1C1C] truncate">
-                    {svc.service_name || svc.name || "Unnamed Service"}
-                  </p>
-                  {(svc.service_description || svc.description) && (
-                    <p className="text-[11px] text-[#9A8F82] truncate max-w-sm">
-                      {(svc.service_description || svc.description)?.substring(
-                        0,
-                        80,
-                      )}
-                    </p>
-                  )}
-                </div>
-                <span
-                  className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
-                    (svc.service_status || svc.status) === "active"
-                      ? "bg-green-50 text-green-600"
-                      : "bg-gray-100 text-gray-500"
-                  }`}
-                >
-                  {svc.service_status || svc.status || "active"}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  //       {loading ? (
+  //         <div className="flex justify-center py-10">
+  //           <Loader2 className="animate-spin text-[#C8922A]" size={22} />
+  //         </div>
+  //       ) : error ? (
+  //         <div className="p-6 text-center">
+  //           <p className="text-red-500 text-[13px] mb-3">{error}</p>
+  //           <button
+  //             onClick={fetchServices}
+  //             className="text-[12px] font-semibold text-[#C8922A] hover:underline"
+  //           >
+  //             Retry
+  //           </button>
+  //         </div>
+  //       ) : services.length === 0 ? (
+  //         <div className="p-10 text-center text-[#9A8F82] text-[13px]">
+  //           No services assigned to this client yet.
+  //         </div>
+  //       ) : (
+  //         <div className="divide-y divide-[#F5F2ED]">
+  //           {services.map((svc: any) => (
+  //             <div
+  //               key={svc.id || svc._id}
+  //               className="px-6 py-4 flex items-center gap-4 hover:bg-[#FAF8F5] transition-colors"
+  //             >
+  //               <div className="w-10 h-10 bg-[#FDF3E3] rounded-xl flex items-center justify-center text-[#C8922A]">
+  //                 <Layers size={16} />
+  //               </div>
+  //               <div className="flex-1 min-w-0">
+  //                 <p className="text-[13px] font-bold text-[#1C1C1C] truncate">
+  //                   {svc.service_name || svc.name || "Unnamed Service"}
+  //                 </p>
+  //                 {(svc.service_description || svc.description) && (
+  //                   <p className="text-[11px] text-[#9A8F82] truncate max-w-sm">
+  //                     {(svc.service_description || svc.description)?.substring(
+  //                       0,
+  //                       80,
+  //                     )}
+  //                   </p>
+  //                 )}
+  //               </div>
+  //               <span
+  //                 className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
+  //                   (svc.service_status || svc.status) === "active"
+  //                     ? "bg-green-50 text-green-600"
+  //                     : "bg-gray-100 text-gray-500"
+  //                 }`}
+  //               >
+  //                 {svc.service_status || svc.status || "active"}
+  //               </span>
+  //             </div>
+  //           ))}
+  //         </div>
+  //       )}
+  //     </div>
+  //   </div>
+  // );
 }
 
 /* ───────────────────────────────────────────────────────────────────────────── */
