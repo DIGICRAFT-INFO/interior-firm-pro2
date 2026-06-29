@@ -22,6 +22,9 @@ import {
   FileStack,
   Bell,
   ChevronDown,
+  Copy,
+  PlusCircle,
+  MinusCircle,
 } from "lucide-react";
 import {
   getAllInvoices,
@@ -33,6 +36,7 @@ import {
   sendInvoiceEmail,
   sendInvoiceWhatsApp,
   getInvoiceById,
+  copyInvoice,
   type Invoice,
 } from "@/services/invoiceService";
 import RecordPaymentModal from "@/components/RecordPaymentModal";
@@ -482,6 +486,17 @@ export default function InvoicesPage() {
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // ── Copy Modal State ────────────────────────────────────────────────────────
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+  const [copySourceInvoice, setCopySourceInvoice] = useState<any>(null);
+  const [copySubmitting, setCopySubmitting] = useState(false);
+  const [copyForm, setCopyForm] = useState<{
+    invoice_date: string;
+    due_date: string;
+    notes: string;
+    items: Array<{ _key: string; description: string; category: string; quantity: string; unit: string; rate: string }>;
+  }>({ invoice_date: "", due_date: "", notes: "", items: [] });
+
   const showToast = (message: string, type: "success" | "error" | "info") =>
     setToast({ message, type });
 
@@ -612,6 +627,78 @@ export default function InvoicesPage() {
       showToast("WhatsApp failed", "error");
     } finally {
       setActionId(null);
+    }
+  };
+
+  // ── Copy Modal Handlers ────────────────────────────────────────────────────
+  const openCopyModal = async (inv: Invoice) => {
+    const full = await getInvoiceById(inv.id);
+    setCopySourceInvoice(full);
+    const today = new Date().toISOString().split("T")[0];
+    const due = new Date();
+    due.setDate(due.getDate() + 15);
+    setCopyForm({
+      invoice_date: today,
+      due_date: due.toISOString().split("T")[0],
+      notes: (full as any).notes || "",
+      items: ((full as any).items || []).map((it: any, i: number) => ({
+        _key: `item_${i}_${Date.now()}`,
+        description: it.description || "",
+        category: it.category || "",
+        quantity: String(it.quantity || "1"),
+        unit: it.unit || "",
+        rate: String(it.rate || "0"),
+      })),
+    });
+    setIsCopyModalOpen(true);
+  };
+
+  const updateCopyItem = (key: string, field: string, value: string) => {
+    setCopyForm(prev => ({
+      ...prev,
+      items: prev.items.map(it => it._key === key ? { ...it, [field]: value } : it),
+    }));
+  };
+
+  const addCopyItem = () => {
+    setCopyForm(prev => ({
+      ...prev,
+      items: [...prev.items, { _key: `new_${Date.now()}`, description: "", category: "", quantity: "1", unit: "", rate: "0" }],
+    }));
+  };
+
+  const removeCopyItem = (key: string) => {
+    setCopyForm(prev => ({
+      ...prev,
+      items: prev.items.filter(it => it._key !== key),
+    }));
+  };
+
+  const submitCopyInvoice = async () => {
+    if (!copySourceInvoice?.id) return;
+    setCopySubmitting(true);
+    try {
+      const newInv = await copyInvoice(copySourceInvoice.id, {
+        invoice_date: copyForm.invoice_date,
+        due_date: copyForm.due_date,
+        notes: copyForm.notes,
+        items: copyForm.items.map(it => ({
+          description: it.description,
+          category: it.category,
+          quantity: it.quantity,
+          unit: it.unit,
+          rate: it.rate,
+        })),
+      });
+      setIsCopyModalOpen(false);
+      setCopySourceInvoice(null);
+      await fetchInvoices();
+      showToast("Invoice copied successfully!", "success");
+      if (newInv?.id) openDetail(newInv.id);
+    } catch (e: any) {
+      showToast(e?.message || "Copy failed", "error");
+    } finally {
+      setCopySubmitting(false);
     }
   };
 
@@ -979,6 +1066,13 @@ export default function InvoicesPage() {
                         >
                           <Trash2 size={13} />
                         </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openCopyModal(inv); }}
+                          title="Copy & Edit Invoice"
+                          className="p-1.5 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100"
+                        >
+                          <Copy size={13} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1004,6 +1098,193 @@ export default function InvoicesPage() {
             openDetail(viewingInvoice.id);
           }}
         />
+      )}
+
+      {/* ════════════════════════════════════════════════════════
+          COPY MODAL: Copy & Edit Invoice
+      ════════════════════════════════════════════════════════ */}
+      {isCopyModalOpen && copySourceInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-[#EDE8DF] w-full max-w-3xl max-h-[92vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#EDE8DF] bg-[#FAF8F5] rounded-t-2xl">
+              <div>
+                <h2 className="text-[15px] font-bold text-[#1C1C1C]">Copy Invoice</h2>
+                <p className="text-[11px] text-[#9A8F82] mt-0.5">
+                  Source: <span className="font-semibold text-[#C8922A]">{copySourceInvoice.invoice_number}</span>
+                  {" "}→ will create <span className="font-semibold text-[#C8922A]">{copySourceInvoice.invoice_number}-C1</span> (or next suffix)
+                </p>
+              </div>
+              <button onClick={() => setIsCopyModalOpen(false)} className="text-[#9A8F82] hover:text-red-500">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Scrollable body */}
+            <div className="overflow-y-auto flex-1 p-6 space-y-5">
+              {/* Meta fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Client</label>
+                  <div className="px-3 py-2 bg-[#FAF8F5] border border-[#EDE8DF] rounded-lg text-[13px] text-[#6B6259]">
+                    {copySourceInvoice.client_name || "—"}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Invoice Type</label>
+                  <div className="px-3 py-2 bg-[#FAF8F5] border border-[#EDE8DF] rounded-lg text-[13px] text-[#6B6259] capitalize">
+                    {copySourceInvoice.invoice_type || "full"}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Invoice Date</label>
+                  <input
+                    type="date"
+                    value={copyForm.invoice_date}
+                    onChange={(e) => setCopyForm(p => ({ ...p, invoice_date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={copyForm.due_date}
+                    onChange={(e) => setCopyForm(p => ({ ...p, due_date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A]"
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Notes</label>
+                <textarea
+                  rows={2}
+                  value={copyForm.notes}
+                  onChange={(e) => setCopyForm(p => ({ ...p, notes: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A] resize-none"
+                  placeholder="Payment terms, remarks..."
+                />
+              </div>
+
+              {/* Line items */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider">Line Items</label>
+                  <button
+                    onClick={addCopyItem}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-[#C8922A] hover:underline"
+                  >
+                    <PlusCircle size={13} /> Add Row
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-[#EDE8DF]">
+                  <table className="w-full min-w-[700px] text-[12px]">
+                    <thead className="bg-[#FAF8F5]">
+                      <tr>
+                        {["Description", "Category", "Qty", "Unit", "Rate (₹)", "Amount (₹)", ""].map((h) => (
+                          <th key={h} className="px-3 py-2 text-left text-[10px] font-bold text-[#9A8F82] uppercase tracking-wider whitespace-nowrap">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F5F2ED]">
+                      {copyForm.items.map((item) => {
+                        const amt = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
+                        return (
+                          <tr key={item._key}>
+                            <td className="px-2 py-1.5">
+                              <input
+                                value={item.description}
+                                onChange={(e) => updateCopyItem(item._key, "description", e.target.value)}
+                                placeholder="e.g. Interior Design"
+                                className="w-full min-w-[140px] px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                value={item.category}
+                                onChange={(e) => updateCopyItem(item._key, "category", e.target.value)}
+                                placeholder="Furniture"
+                                className="w-full min-w-[100px] px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) => updateCopyItem(item._key, "quantity", e.target.value)}
+                                className="w-16 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                value={item.unit}
+                                onChange={(e) => updateCopyItem(item._key, "unit", e.target.value)}
+                                placeholder="sqft"
+                                className="w-16 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="number"
+                                value={item.rate}
+                                onChange={(e) => updateCopyItem(item._key, "rate", e.target.value)}
+                                className="w-24 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-3 py-1.5 font-semibold text-[#1C1C1C] whitespace-nowrap">
+                              ₹{amt.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <button
+                                onClick={() => removeCopyItem(item._key)}
+                                className="text-red-400 hover:text-red-600"
+                              >
+                                <MinusCircle size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Grand total preview */}
+                <div className="flex justify-end mt-3 pr-2">
+                  <div className="text-[13px] font-bold text-[#1C1C1C]">
+                    Grand Total: ₹
+                    {copyForm.items
+                      .reduce((s, it) => s + (parseFloat(it.quantity) || 0) * (parseFloat(it.rate) || 0), 0)
+                      .toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-[#EDE8DF] flex justify-end gap-3 bg-[#FAF8F5] rounded-b-2xl">
+              <button
+                onClick={() => setIsCopyModalOpen(false)}
+                className="px-4 py-2 rounded-lg border border-[#EDE8DF] text-[13px] font-semibold text-[#6B6259] hover:bg-[#F5F2ED]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitCopyInvoice}
+                disabled={copySubmitting}
+                className="px-5 py-2 rounded-lg bg-[#C8922A] text-white text-[13px] font-bold hover:bg-[#B07A20] disabled:opacity-60 flex items-center gap-2"
+              >
+                {copySubmitting ? <Loader2 size={14} className="animate-spin" /> : <Copy size={14} />}
+                Create Copy
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
