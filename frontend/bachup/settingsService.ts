@@ -6,7 +6,6 @@
 import API_BASE_URL from "@/lib/config";
 
 const SETTINGS_URL = `${API_BASE_URL}/settings`;
-const MILESTONES_URL = `${SETTINGS_URL}/milestones`;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,7 +20,7 @@ export type GSTData = {
 };
 
 export type Milestone = {
-  id?: string;
+  id?: number;
   label: string;
   percentage: number;
 };
@@ -38,7 +37,11 @@ export type AllSettings = {
 
 function getAuthHeaders(): HeadersInit {
   const token =
-    typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    typeof window !== "undefined"
+      ? localStorage.getItem("access") ||
+        localStorage.getItem("access_token") ||
+        localStorage.getItem("token")
+      : null;
   return {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -48,6 +51,8 @@ function getAuthHeaders(): HeadersInit {
 function handleUnauthorized(status: number) {
   if (status === 401 && typeof window !== "undefined") {
     localStorage.removeItem("token");
+    localStorage.removeItem("access");
+    localStorage.removeItem("access_token");
     window.location.href = "/login";
   }
 }
@@ -77,80 +82,22 @@ export async function getAllSettings(): Promise<AllSettings> {
     bank,
     brand,
     numbering,
-    milestones: milestonesRaw.results ?? milestonesRaw,
+    milestones: milestonesRaw.results ?? milestonesRaw ?? [],
   };
 }
 
 // ─── Generic: Koi bhi settings endpoint save karo ────────────────────────────
+// ✅ milestones ke liye PUT /milestones/ with full array — backend bulk replace karta hai
 
-export async function saveSettings(endpoint: string, data: Record<string, any>): Promise<void> {
+export async function saveSettings(endpoint: string, data: Record<string, any> | any[]): Promise<void> {
   const response = await fetch(`${SETTINGS_URL}/${endpoint}/`, {
     method: "PUT",
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
   handleUnauthorized(response.status);
-  if (!response.ok) throw new Error(`Failed to save ${endpoint} settings`);
-}
-
-// ─── Milestones: stored as separate documents, so "save" means          ────
-// ─── reconciling the local list against the server (create/update/delete) ──
-
-export async function saveMilestones(milestones: Milestone[]): Promise<Milestone[]> {
-  // 1. Find out what currently exists on the server so we know what to delete.
-  const existingRes = await fetch(`${MILESTONES_URL}/`, {
-    method: "GET",
-    headers: getAuthHeaders(),
-  });
-  handleUnauthorized(existingRes.status);
-  if (!existingRes.ok) throw new Error("Failed to load existing milestones");
-  const existingRaw = await existingRes.json();
-  const existing: Milestone[] = existingRaw.results ?? existingRaw;
-  const existingIds = new Set(existing.map((m) => m.id));
-  const keptIds = new Set(milestones.filter((m) => m.id).map((m) => m.id));
-
-  // 2. Delete milestones that were removed locally.
-  const toDelete = [...existingIds].filter((id) => !keptIds.has(id));
-  await Promise.all(
-    toDelete.map((id) =>
-      fetch(`${MILESTONES_URL}/${id}/`, {
-        method: "DELETE",
-        headers: getAuthHeaders(),
-      }).then((res) => {
-        handleUnauthorized(res.status);
-        if (!res.ok && res.status !== 404) {
-          throw new Error(`Failed to delete milestone ${id}`);
-        }
-      })
-    )
-  );
-
-  // 3. Create new milestones (no id yet) and update existing ones.
-  const saved = await Promise.all(
-    milestones.map(async (m, index) => {
-      const payload = { label: m.label, percentage: m.percentage, sort_order: index };
-
-      if (!m.id) {
-        const res = await fetch(`${MILESTONES_URL}/`, {
-          method: "POST",
-          headers: getAuthHeaders(),
-          body: JSON.stringify(payload),
-        });
-        handleUnauthorized(res.status);
-        if (!res.ok) throw new Error("Failed to create milestone");
-        return res.json();
-      }
-
-      const res = await fetch(`${MILESTONES_URL}/${m.id}/`, {
-        method: "PUT",
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload),
-      });
-      handleUnauthorized(res.status);
-      if (!res.ok) throw new Error(`Failed to update milestone ${m.id}`);
-      return res.json();
-    })
-  );
-
-  return saved;
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody?.error || `Failed to save ${endpoint} settings`);
+  }
 }

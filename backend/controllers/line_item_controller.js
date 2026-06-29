@@ -1,39 +1,38 @@
 const LineItemLibrary = require('../models/line_item_library');
 
-// LineItemLibraryListCreateView -> GET
+// GET /line-items/
+// FIX: Added ?all=true param so the Settings page can fetch ALL items (including inactive)
+// Without this, toggling an item inactive immediately hides it from the list
 exports.get_line_items = async (req, res) => {
   try {
-    // get_queryset() logic: Only active items by default
-    let query = { is_active: true };
+    let query = {};
 
-    // category query param filter (icontains logic via regex)
+    // Default: only active items (for quotation dropdowns)
+    // Settings page passes ?all=true to see inactive items too
+    if (req.query.all !== 'true') {
+      query.is_active = true;
+    }
+
     if (req.query.category) {
       query.category = { $regex: req.query.category, $options: 'i' };
     }
 
-    // search_fields logic ['name', 'category', 'description']
     if (req.query.search) {
       const searchRegex = { $regex: req.query.search, $options: 'i' };
       query.$or = [
         { name: searchRegex },
         { category: searchRegex },
-        { description: searchRegex }
+        { description: searchRegex },
       ];
     }
 
-    // Default ordering from Meta class: ['category', 'name']
     let sortObj = { category: 1, name: 1 };
-    
-    // ordering_fields override ['category', 'name', 'default_rate']
     if (req.query.ordering) {
       sortObj = {};
       const fields = req.query.ordering.split(',');
       fields.forEach(field => {
-        if (field.startsWith('-')) {
-          sortObj[field.substring(1)] = -1;
-        } else {
-          sortObj[field] = 1;
-        }
+        if (field.startsWith('-')) sortObj[field.substring(1)] = -1;
+        else sortObj[field] = 1;
       });
     }
 
@@ -44,7 +43,7 @@ exports.get_line_items = async (req, res) => {
   }
 };
 
-// LineItemLibraryListCreateView -> POST
+// POST /line-items/
 exports.create_line_item = async (req, res) => {
   try {
     const item = await LineItemLibrary.create(req.body);
@@ -54,8 +53,7 @@ exports.create_line_item = async (req, res) => {
   }
 };
 
-// LineItemLibraryDetailView -> GET
-// Fetches even inactive ones as no custom get_queryset restriction is applied to detail view
+// GET /line-items/:pk/
 exports.get_line_item_detail = async (req, res) => {
   try {
     const item = await LineItemLibrary.findById(req.params.pk);
@@ -66,12 +64,12 @@ exports.get_line_item_detail = async (req, res) => {
   }
 };
 
-// LineItemLibraryDetailView -> PUT/PATCH
+// PUT/PATCH /line-items/:pk/
 exports.update_line_item = async (req, res) => {
   try {
-    const item = await LineItemLibrary.findByIdAndUpdate(req.params.pk, req.body, { 
-      new: true, 
-      runValidators: true 
+    const item = await LineItemLibrary.findByIdAndUpdate(req.params.pk, req.body, {
+      new: true,
+      runValidators: true,
     });
     if (!item) return res.status(404).json({ detail: 'Not found.' });
     res.json(item);
@@ -80,7 +78,7 @@ exports.update_line_item = async (req, res) => {
   }
 };
 
-// LineItemLibraryDetailView -> DELETE
+// DELETE /line-items/:pk/
 exports.delete_line_item = async (req, res) => {
   try {
     const item = await LineItemLibrary.findByIdAndDelete(req.params.pk);

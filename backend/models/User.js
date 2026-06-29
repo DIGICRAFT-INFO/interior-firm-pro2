@@ -72,6 +72,10 @@ userSchema.virtual('is_finance_or_above').get(function () {
   return ['owner', 'manager', 'accountant'].includes(this.role);
 });
 
+// FIX: virtuals:true on toObject so req.user.is_owner resolves in middleware
+// (previously only toJSON had virtuals:true, but Mongoose uses toObject internally)
+userSchema.set('toObject', { virtuals: true });
+
 userSchema.set('toJSON', {
   virtuals: true,
   transform: (doc, ret) => {
