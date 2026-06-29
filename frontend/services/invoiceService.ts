@@ -298,3 +298,61 @@ export async function sendReminder(invoiceId: string, channel: "whatsapp" | "ema
   });
   if (!res.ok) throw new Error("Reminder failed");
 }
+// ─── POST: Copy invoice (creates C1/C2/... clone) ─────────────────────────────
+export type CopyInvoicePayload = {
+  invoice_date?: string;
+  due_date?: string;
+  notes?: string;
+  items?: Array<{
+    description: string;
+    category: string;
+    quantity: string;
+    unit: string;
+    rate: string;
+  }>;
+};
+
+export async function copyInvoice(id: string, payload: CopyInvoicePayload = {}): Promise<Invoice> {
+  const res = await fetch(`${INVOICES_URL}${id}/copy/`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  handleUnauthorized(res.status);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw err;
+  }
+  return res.json() as Promise<Invoice>;
+}
+
+// ─── PATCH: Update invoice + replace all items ────────────────────────────────
+export type FullInvoiceUpdatePayload = {
+  invoice_type?: string;
+  invoice_date?: string;
+  due_date?: string;
+  notes?: string;
+  items?: Array<{
+    id?: string;
+    description: string;
+    category: string;
+    quantity: string;
+    unit: string;
+    rate: string;
+    amount?: string;
+  }>;
+};
+
+export async function updateInvoiceFull(id: string, data: FullInvoiceUpdatePayload): Promise<Invoice> {
+  const res = await fetch(`${INVOICES_URL}${id}/`, {
+    method: "PATCH",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+  handleUnauthorized(res.status);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw err;
+  }
+  return res.json() as Promise<Invoice>;
+}

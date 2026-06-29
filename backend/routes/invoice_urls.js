@@ -3,7 +3,7 @@ const router = express.Router();
 const { 
   get_invoices, create_invoice, get_invoice_detail, 
   update_invoice, delete_invoice, generate_invoice, get_invoice_pdf,
-  send_invoice, mark_invoice_paid   // ← yeh add karo
+  send_invoice, mark_invoice_paid, copy_invoice
 } = require('../controllers/invoice_controller');
 
 const {
@@ -39,8 +39,9 @@ router
 // -------------------------------------------------------------
 router.get("/:pk/pdf/", is_authenticated, get_invoice_pdf);
 
-router.post('/:pk/send/', is_authenticated, is_finance_or_above, send_invoice);         // ← fixed
-router.post('/:pk/mark_paid/', is_authenticated, is_finance_or_above, mark_invoice_paid); // ← fixed
+router.post('/:pk/send/', is_authenticated, is_finance_or_above, send_invoice);
+router.post('/:pk/mark_paid/', is_authenticated, is_finance_or_above, mark_invoice_paid);
+router.post('/:pk/copy/', is_authenticated, is_manager_or_above, copy_invoice);
 // -------------------------------------------------------------
 // Django path: '<uuid:pk>/' (InvoiceDetailView)
 // DELETE: IsManagerOrAbove, PUT/PATCH/GET: IsFinanceOrAbove

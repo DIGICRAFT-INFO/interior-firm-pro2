@@ -43,6 +43,9 @@ import {
   ChevronUp,
   ChevronDown,
   ArrowRight,
+  Copy,
+  PlusCircle,
+  MinusCircle,
 } from "lucide-react";
 
 import {
@@ -98,6 +101,7 @@ import {
   downloadInvoiceCSV,
   sendInvoiceEmail,
   sendInvoiceWhatsApp,
+  copyInvoice,
   type Invoice,
 } from "@/services/invoiceService";
 
@@ -388,6 +392,7 @@ export default function ClientDetails() {
   // ── Invoices ───────────────────────────────────────────────────────────────
   const [invoices, setInvoices] = useState<any[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [invoicesRefreshKey, setInvoicesRefreshKey] = useState(0);
 
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
@@ -410,10 +415,36 @@ export default function ClientDetails() {
   // optional invoice edit (minimal)
   const [isInvoiceEditOpen, setIsInvoiceEditOpen] = useState(false);
   const [invoiceEditSubmitting, setInvoiceEditSubmitting] = useState(false);
-  const [invoiceEditForm, setInvoiceEditForm] = useState({
+  const [invoiceEditForm, setInvoiceEditForm] = useState<{
+    invoice_type: string;
+    invoice_date: string;
+    due_date: string;
+    notes: string;
+    items: Array<{ _key: string; description: string; category: string; quantity: string; unit: string; rate: string }>;
+  }>({
+    invoice_type: "full",
     invoice_date: "",
     due_date: "",
     notes: "",
+    items: [],
+  });
+
+  // ── Invoice Copy Modal (full edit before cloning) ──────────────────────────
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+  const [copySourceInvoice, setCopySourceInvoice] = useState<any>(null);
+  const [copySubmitting, setCopySubmitting] = useState(false);
+  const [copyForm, setCopyForm] = useState<{
+    invoice_type: string;
+    invoice_date: string;
+    due_date: string;
+    notes: string;
+    items: Array<{ _key: string; description: string; category: string; quantity: string; unit: string; rate: string }>;
+  }>({
+    invoice_type: "full",
+    invoice_date: "",
+    due_date: "",
+    notes: "",
+    items: [],
   });
 
   /* ────────────────────────────────────────────────────────────────────────── */
@@ -490,9 +521,12 @@ export default function ClientDetails() {
 
   const fetchInvoices = useCallback(async () => {
     setInvoicesLoading(true);
+    setInvoices([]); // force clear so React always re-renders rows with fresh data
     try {
       const data = await getInvoicesByClient(clientId as string);
-      setInvoices(data);
+      // Deep-clone each object so React sees new references and re-renders every row
+      setInvoices(data.map((inv: any) => ({ ...inv })));
+      setInvoicesRefreshKey(k => k + 1); // bump key so every row remounts
     } catch (e) {
       console.error("Invoices fetch failed:", e);
     } finally {
@@ -1199,27 +1233,63 @@ const payload = {
   };
 
   const openInvoiceEdit = async (iid: string) => {
-    const inv = await getInvoiceById(iid);
+    const inv = await getInvoiceById(iid) as any;
     setInvoiceEditForm({
-      invoice_date: inv.invoice_date || "",
-      due_date: inv.due_date || "",
-      notes: inv.notes || "",
+      invoice_type: inv.invoice_type || "full",
+      invoice_date: inv.invoice_date ? inv.invoice_date.split("T")[0] : "",
+      due_date:     inv.due_date     ? inv.due_date.split("T")[0]     : "",
+      notes:        inv.notes        || "",
+      items: (inv.items || []).map((it: any, i: number) => ({
+        _key:        `edit_${i}_${Date.now()}`,
+        description: it.description || "",
+        category:    it.category    || "",
+        quantity:    String(it.quantity || "1"),
+        unit:        it.unit        || "",
+        rate:        String(it.rate || "0"),
+      })),
     });
     setIsInvoiceEditOpen(true);
+  };
+
+  const updateEditItem = (key: string, field: string, value: string) => {
+    setInvoiceEditForm((prev) => ({
+      ...prev,
+      items: prev.items.map((it) => it._key === key ? { ...it, [field]: value } : it),
+    }));
+  };
+
+  const addEditItem = () => {
+    setInvoiceEditForm((prev) => ({
+      ...prev,
+      items: [...prev.items, { _key: `new_${Date.now()}`, description: "", category: "", quantity: "1", unit: "", rate: "0" }],
+    }));
+  };
+
+  const removeEditItem = (key: string) => {
+    setInvoiceEditForm((prev) => ({
+      ...prev,
+      items: prev.items.filter((it) => it._key !== key),
+    }));
   };
 
   const submitInvoiceEdit = async (e: any) => {
     e.preventDefault();
     if (!viewingInvoice?.id) return;
-
     setInvoiceEditSubmitting(true);
     try {
       await updateInvoice(viewingInvoice.id, {
+        invoice_type: invoiceEditForm.invoice_type,
         invoice_date: invoiceEditForm.invoice_date,
-        due_date: invoiceEditForm.due_date,
-        notes: invoiceEditForm.notes,
+        due_date:     invoiceEditForm.due_date,
+        notes:        invoiceEditForm.notes,
+        items: invoiceEditForm.items.map((it) => ({
+          description: it.description,
+          category:    it.category,
+          quantity:    it.quantity,
+          unit:        it.unit,
+          rate:        it.rate,
+        })),
       } as any);
-
       await fetchInvoices();
       await fetchInvoiceDetail(viewingInvoice.id);
       setIsInvoiceEditOpen(false);
@@ -1227,6 +1297,85 @@ const payload = {
       alert(e?.message || "Update failed");
     } finally {
       setInvoiceEditSubmitting(false);
+    }
+  };
+
+  // ── Copy Modal Handlers ────────────────────────────────────────────────────
+  const openCopyModal = async (inv: any) => {
+    // Fetch full detail (with items)
+    const full = await getInvoiceById(inv.id);
+    setCopySourceInvoice(full);
+    const today = new Date().toISOString().split("T")[0];
+    const due = new Date();
+    due.setDate(due.getDate() + 15);
+    setCopyForm({
+      invoice_type: (full as any).invoice_type || "full",
+      invoice_date: today,
+      due_date: due.toISOString().split("T")[0],
+      notes: (full as any).notes || "",
+      items: ((full as any).items || []).map((it: any, i: number) => ({
+        _key: `item_${i}_${Date.now()}`,
+        description: it.description || "",
+        category: it.category || "",
+        quantity: String(it.quantity || "1"),
+        unit: it.unit || "",
+        rate: String(it.rate || "0"),
+      })),
+    });
+    setIsCopyModalOpen(true);
+  };
+
+  const updateCopyItem = (key: string, field: string, value: string) => {
+    setCopyForm((prev) => ({
+      ...prev,
+      items: prev.items.map((it) =>
+        it._key === key ? { ...it, [field]: value } : it
+      ),
+    }));
+  };
+
+  const addCopyItem = () => {
+    setCopyForm((prev) => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        { _key: `new_${Date.now()}`, description: "", category: "", quantity: "1", unit: "", rate: "0" },
+      ],
+    }));
+  };
+
+  const removeCopyItem = (key: string) => {
+    setCopyForm((prev) => ({
+      ...prev,
+      items: prev.items.filter((it) => it._key !== key),
+    }));
+  };
+
+  const submitCopyInvoice = async () => {
+    if (!copySourceInvoice?.id) return;
+    setCopySubmitting(true);
+    try {
+      const newInv = await copyInvoice(copySourceInvoice.id, {
+        invoice_date: copyForm.invoice_date,
+        due_date: copyForm.due_date,
+        notes: copyForm.notes,
+        items: copyForm.items.map((it) => ({
+          description: it.description,
+          category: it.category,
+          quantity: it.quantity,
+          unit: it.unit,
+          rate: it.rate,
+        })),
+      });
+      setIsCopyModalOpen(false);
+      setCopySourceInvoice(null);
+      await fetchInvoices();
+      // Auto-open the newly created copy in the detail panel
+      if (newInv?.id) await fetchInvoiceDetail(newInv.id);
+    } catch (e: any) {
+      alert(e?.message || "Copy failed");
+    } finally {
+      setCopySubmitting(false);
     }
   };
 
@@ -2608,7 +2757,7 @@ const payload = {
                       <tbody className="divide-y divide-[#F5F2ED]">
                         {invoices.map((inv: any) => (
                           <tr
-                            key={inv.id}
+                            key={`${inv.id}-${invoicesRefreshKey}`}
                             className="hover:bg-[#FAF8F5] transition-colors"
                           >
                             <td className="px-4 py-4">
@@ -2821,6 +2970,15 @@ const payload = {
                                   ) : (
                                     <Trash2 size={13} />
                                   )}
+                                </button>
+
+                                {/* ── COPY button ── */}
+                                <button
+                                  onClick={() => openCopyModal(inv)}
+                                  title="Copy & Edit Invoice"
+                                  className="p-1.5 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100"
+                                >
+                                  <Copy size={13} />
                                 </button>
                               </div>
                             </td>
@@ -4065,60 +4223,390 @@ const payload = {
         </Modal>
       )}
 
-      {/* INVOICE EDIT MODAL */}
-      {isInvoiceEditOpen && viewingInvoice && (
-        <Modal
-          title="Edit Invoice"
-          onClose={() => setIsInvoiceEditOpen(false)}
-          maxW="max-w-lg"
-        >
-          <form onSubmit={submitInvoiceEdit} className="p-6 space-y-4">
-            <FF label="Invoice Date">
-              <input
-                type="date"
-                value={invoiceEditForm.invoice_date}
-                onChange={(e) =>
-                  setInvoiceEditForm((p) => ({
-                    ...p,
-                    invoice_date: e.target.value,
-                  }))
-                }
-                className={inputCls}
-              />
-            </FF>
-            <FF label="Due Date">
-              <input
-                type="date"
-                value={invoiceEditForm.due_date}
-                onChange={(e) =>
-                  setInvoiceEditForm((p) => ({
-                    ...p,
-                    due_date: e.target.value,
-                  }))
-                }
-                className={inputCls}
-              />
-            </FF>
-            <FF label="Notes">
-              <textarea
-                rows={4}
-                value={invoiceEditForm.notes}
-                onChange={(e) =>
-                  setInvoiceEditForm((p) => ({ ...p, notes: e.target.value }))
-                }
-                className={`${inputCls} resize-none`}
-              />
-            </FF>
-
-            <div className="pt-2 border-t border-[#F5F2ED]">
-              <MFooter
-                onCancel={() => setIsInvoiceEditOpen(false)}
-                isSubmitting={invoiceEditSubmitting}
-                label="Update Invoice"
-              />
+      {/* ─── COPY INVOICE MODAL ─────────────────────────────────────────────── */}
+      {isCopyModalOpen && copySourceInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-[#EDE8DF] w-full max-w-3xl max-h-[92vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#EDE8DF] bg-[#FAF8F5] rounded-t-2xl">
+              <div>
+                <h2 className="text-[15px] font-bold text-[#1C1C1C]">Copy Invoice</h2>
+                <p className="text-[11px] text-[#9A8F82] mt-0.5">
+                  Source: <span className="font-semibold text-[#C8922A]">{copySourceInvoice.invoice_number}</span>
+                  {" "}→ will create <span className="font-semibold text-[#C8922A]">{copySourceInvoice.invoice_number}-C1</span> (or next suffix)
+                </p>
+              </div>
+              <button onClick={() => setIsCopyModalOpen(false)} className="text-[#9A8F82] hover:text-red-500">
+                <X size={18} />
+              </button>
             </div>
-          </form>
-        </Modal>
+
+            {/* Scrollable body */}
+            <div className="overflow-y-auto flex-1 p-6 space-y-5">
+              {/* Meta fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Client</label>
+                  <div className="px-3 py-2 bg-[#FAF8F5] border border-[#EDE8DF] rounded-lg text-[13px] text-[#6B6259]">
+                    {copySourceInvoice.client_name || "—"}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Invoice Type</label>
+                  <select
+                    value={copyForm.invoice_type}
+                    onChange={(e) => setCopyForm((p) => ({ ...p, invoice_type: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A] bg-white"
+                  >
+                    {["full", "advance", "milestone", "final"].map((t) => (
+                      <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Invoice Date</label>
+                  <input
+                    type="date"
+                    value={copyForm.invoice_date}
+                    onChange={(e) => setCopyForm((p) => ({ ...p, invoice_date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={copyForm.due_date}
+                    onChange={(e) => setCopyForm((p) => ({ ...p, due_date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A]"
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Notes</label>
+                <textarea
+                  rows={2}
+                  value={copyForm.notes}
+                  onChange={(e) => setCopyForm((p) => ({ ...p, notes: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A] resize-none"
+                  placeholder="Payment terms, remarks..."
+                />
+              </div>
+
+              {/* Line items */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider">Line Items</label>
+                  <button
+                    onClick={addCopyItem}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-[#C8922A] hover:underline"
+                  >
+                    <PlusCircle size={13} /> Add Row
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-[#EDE8DF]">
+                  <table className="w-full min-w-[700px] text-[12px]">
+                    <thead className="bg-[#FAF8F5]">
+                      <tr>
+                        {["Description", "Category", "Qty", "Unit", "Rate (₹)", "Amount (₹)", ""].map((h) => (
+                          <th key={h} className="px-3 py-2 text-left text-[10px] font-bold text-[#9A8F82] uppercase tracking-wider whitespace-nowrap">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F5F2ED]">
+                      {copyForm.items.map((item) => {
+                        const amt = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
+                        return (
+                          <tr key={item._key}>
+                            <td className="px-2 py-1.5">
+                              <input
+                                value={item.description}
+                                onChange={(e) => updateCopyItem(item._key, "description", e.target.value)}
+                                placeholder="e.g. Interior Design"
+                                className="w-full min-w-[140px] px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                value={item.category}
+                                onChange={(e) => updateCopyItem(item._key, "category", e.target.value)}
+                                placeholder="Furniture"
+                                className="w-full min-w-[100px] px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) => updateCopyItem(item._key, "quantity", e.target.value)}
+                                className="w-16 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                value={item.unit}
+                                onChange={(e) => updateCopyItem(item._key, "unit", e.target.value)}
+                                placeholder="sqft"
+                                className="w-16 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="number"
+                                value={item.rate}
+                                onChange={(e) => updateCopyItem(item._key, "rate", e.target.value)}
+                                className="w-24 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-3 py-1.5 font-semibold text-[#1C1C1C] whitespace-nowrap">
+                              ₹{amt.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <button
+                                onClick={() => removeCopyItem(item._key)}
+                                className="text-red-400 hover:text-red-600"
+                              >
+                                <MinusCircle size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Grand total preview */}
+                <div className="flex justify-end mt-3 pr-2">
+                  <div className="text-[13px] font-bold text-[#1C1C1C]">
+                    Grand Total: ₹
+                    {copyForm.items
+                      .reduce((s, it) => s + (parseFloat(it.quantity) || 0) * (parseFloat(it.rate) || 0), 0)
+                      .toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-[#EDE8DF] flex justify-end gap-3 bg-[#FAF8F5] rounded-b-2xl">
+              <button
+                onClick={() => setIsCopyModalOpen(false)}
+                className="px-4 py-2 rounded-lg border border-[#EDE8DF] text-[13px] font-semibold text-[#6B6259] hover:bg-[#F5F2ED]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitCopyInvoice}
+                disabled={copySubmitting}
+                className="px-5 py-2 rounded-lg bg-[#C8922A] text-white text-[13px] font-bold hover:bg-[#b07d24] disabled:opacity-60 flex items-center gap-2"
+              >
+                {copySubmitting ? <Loader2 size={14} className="animate-spin" /> : <Copy size={14} />}
+                {copySubmitting ? "Creating..." : "Create Copy"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── INVOICE EDIT MODAL (Full) ──────────────────────────────────────── */}
+      {isInvoiceEditOpen && viewingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-[#EDE8DF] w-full max-w-3xl max-h-[92vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#EDE8DF] bg-[#FAF8F5] rounded-t-2xl">
+              <div>
+                <h2 className="text-[15px] font-bold text-[#1C1C1C]">Edit Invoice</h2>
+                <p className="text-[11px] text-[#9A8F82] mt-0.5">
+                  <span className="font-semibold text-[#C8922A]">{viewingInvoice.invoice_number}</span>
+                  {" — "}{viewingInvoice.project_name}
+                </p>
+              </div>
+              <button onClick={() => setIsInvoiceEditOpen(false)} className="text-[#9A8F82] hover:text-red-500">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Scrollable body */}
+            <form onSubmit={submitInvoiceEdit} className="overflow-y-auto flex-1 p-6 space-y-5">
+              {/* Meta fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Client</label>
+                  <div className="px-3 py-2 bg-[#FAF8F5] border border-[#EDE8DF] rounded-lg text-[13px] text-[#6B6259]">
+                    {viewingInvoice.client_name || "—"}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Invoice Type</label>
+                  <select
+                    value={invoiceEditForm.invoice_type}
+                    onChange={(e) => setInvoiceEditForm((p) => ({ ...p, invoice_type: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A] bg-white"
+                  >
+                    {["full", "advance", "milestone", "final"].map((t) => (
+                      <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Invoice Date</label>
+                  <input
+                    type="date"
+                    value={invoiceEditForm.invoice_date}
+                    onChange={(e) => setInvoiceEditForm((p) => ({ ...p, invoice_date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={invoiceEditForm.due_date}
+                    onChange={(e) => setInvoiceEditForm((p) => ({ ...p, due_date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A]"
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Notes</label>
+                <textarea
+                  rows={2}
+                  value={invoiceEditForm.notes}
+                  onChange={(e) => setInvoiceEditForm((p) => ({ ...p, notes: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A] resize-none"
+                  placeholder="Payment terms, remarks..."
+                />
+              </div>
+
+              {/* Line items */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider">Line Items</label>
+                  <button
+                    type="button"
+                    onClick={addEditItem}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-[#C8922A] hover:underline"
+                  >
+                    <PlusCircle size={13} /> Add Row
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-[#EDE8DF]">
+                  <table className="w-full min-w-[700px] text-[12px]">
+                    <thead className="bg-[#FAF8F5]">
+                      <tr>
+                        {["Description", "Category", "Qty", "Unit", "Rate (₹)", "Amount (₹)", ""].map((h) => (
+                          <th key={h} className="px-3 py-2 text-left text-[10px] font-bold text-[#9A8F82] uppercase tracking-wider whitespace-nowrap">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F5F2ED]">
+                      {invoiceEditForm.items.map((item) => {
+                        const amt = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
+                        return (
+                          <tr key={item._key}>
+                            <td className="px-2 py-1.5">
+                              <input
+                                value={item.description}
+                                onChange={(e) => updateEditItem(item._key, "description", e.target.value)}
+                                placeholder="e.g. Interior Design"
+                                className="w-full min-w-[140px] px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                value={item.category}
+                                onChange={(e) => updateEditItem(item._key, "category", e.target.value)}
+                                placeholder="Furniture"
+                                className="w-full min-w-[100px] px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) => updateEditItem(item._key, "quantity", e.target.value)}
+                                className="w-16 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                value={item.unit}
+                                onChange={(e) => updateEditItem(item._key, "unit", e.target.value)}
+                                placeholder="sqft"
+                                className="w-16 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="number"
+                                value={item.rate}
+                                onChange={(e) => updateEditItem(item._key, "rate", e.target.value)}
+                                className="w-24 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-3 py-1.5 font-semibold text-[#1C1C1C] whitespace-nowrap">
+                              ₹{amt.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <button
+                                type="button"
+                                onClick={() => removeEditItem(item._key)}
+                                className="text-red-400 hover:text-red-600"
+                              >
+                                <MinusCircle size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Grand total preview */}
+                <div className="flex justify-end mt-3 pr-2">
+                  <div className="text-[13px] font-bold text-[#1C1C1C]">
+                    Subtotal: ₹
+                    {invoiceEditForm.items
+                      .reduce((s, it) => s + (parseFloat(it.quantity) || 0) * (parseFloat(it.rate) || 0), 0)
+                      .toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                    <span className="text-[11px] font-normal text-[#9A8F82] ml-2">(tax recalculated on save)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer inside form */}
+              <div className="pt-4 border-t border-[#EDE8DF] flex justify-end gap-3 bg-white sticky bottom-0">
+                <button
+                  type="button"
+                  onClick={() => setIsInvoiceEditOpen(false)}
+                  className="px-4 py-2 rounded-lg border border-[#EDE8DF] text-[13px] font-semibold text-[#6B6259] hover:bg-[#F5F2ED]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={invoiceEditSubmitting}
+                  className="px-5 py-2 rounded-lg bg-[#C8922A] text-white text-[13px] font-bold hover:bg-[#b07d24] disabled:opacity-60 flex items-center gap-2"
+                >
+                  {invoiceEditSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Edit2 size={14} />}
+                  {invoiceEditSubmitting ? "Saving..." : "Update Invoice"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

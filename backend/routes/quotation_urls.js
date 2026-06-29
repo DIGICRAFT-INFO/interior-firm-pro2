@@ -25,6 +25,7 @@ router.get('/:pk/pdf/', is_authenticated, ctrl.get_quotation_pdf); //
 // Django path: '<uuid:pk>/' (QuotationDetailView)
 // GET: IsAuthenticated | PUT, PATCH, DELETE: IsManagerOrAbove
 // -------------------------------------------------------------
+router.post('/:pk/copy/', is_authenticated, is_manager_or_above, ctrl.copy_quotation);
 router.route('/:pk/')
   .get(is_authenticated, ctrl.get_quotation_detail)
   .put(is_authenticated, is_manager_or_above, ctrl.update_quotation)

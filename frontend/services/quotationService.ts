@@ -250,3 +250,29 @@ export async function sendQuotationWhatsApp(id: string): Promise<void> {
   handleUnauthorized(res.status);
   if (!res.ok) throw new Error("WhatsApp failed");
 }
+// ─── POST: Copy quotation (creates C1/C2/... clone) ──────────────────────────
+export type CopyQuotationPayload = {
+  valid_until?: string;
+  notes?: string;
+  items?: Array<{
+    description: string;
+    category: string;
+    quantity: string;
+    unit: string;
+    rate: string;
+  }>;
+};
+
+export async function copyQuotation(id: string, payload: CopyQuotationPayload = {}): Promise<Quotation> {
+  const res = await fetch(`${QUOTATIONS_URL}${id}/copy/`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  handleUnauthorized(res.status);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw err;
+  }
+  return res.json() as Promise<Quotation>;
+}

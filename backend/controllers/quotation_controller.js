@@ -333,3 +333,113 @@ exports.get_quotation_pdf = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+// ── Copy Quotation ────────────────────────────────────────────────────────────
+exports.copy_quotation = async (req, res) => {
+  const session = await require('mongoose').startSession();
+  session.startTransaction();
+  try {
+    const source = await Quotation.findById(req.params.pk)
+      .populate('items')
+      .session(session);
+    if (!source) return res.status(404).json({ detail: 'Not found.' });
+
+    // ── Determine next copy suffix ──────────────────────────────────────────
+    const baseNumber = source.quote_number;
+    const escapedBase = baseNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const copyPattern = new RegExp(`^${escapedBase}-C(\\d+)$`);
+
+    const existingCopies = await Quotation.find({
+      quote_number: copyPattern,
+    }).session(session);
+
+    let nextCopyNum = 1;
+    if (existingCopies.length > 0) {
+      const nums = existingCopies.map(q => {
+        const m = q.quote_number.match(/-C(\d+)$/);
+        return m ? parseInt(m[1], 10) : 0;
+      });
+      nextCopyNum = Math.max(...nums) + 1;
+    }
+
+    const newQuoteNumber = `${baseNumber}-C${nextCopyNum}`;
+
+    // ── Clone quotation ─────────────────────────────────────────────────────
+    const today = new Date();
+    const validUntil = req.body.valid_until ? new Date(req.body.valid_until) : source.valid_until;
+
+    const [newQuotation] = await Quotation.create([{
+      project:        source.project,
+      quote_number:   newQuoteNumber,
+      version:        1,
+      status:         'draft',
+      valid_until:    validUntil,
+      discount_type:  source.discount_type,
+      discount_value: source.discount_value,
+      cgst_rate:      source.cgst_rate,
+      sgst_rate:      source.sgst_rate,
+      igst_rate:      source.igst_rate,
+      notes:          req.body.notes !== undefined ? req.body.notes : source.notes,
+    }], { session });
+
+    // ── Clone line items (with any edits from req.body.items) ───────────────
+    const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const itemOverrides = req.body.items || [];
+    const sourceItems = source.items || [];
+
+    const allItems = itemOverrides.length > 0
+      ? itemOverrides.map((it, idx) => ({
+          quotation:   newQuotation._id,
+          description: it.description || '',
+          category:    it.category    || '',
+          quantity:    parseFloat(it.quantity) || 0,
+          unit:        it.unit        || '',
+          rate:        parseFloat(it.rate)     || 0,
+          amount:      round2((parseFloat(it.quantity) || 0) * (parseFloat(it.rate) || 0)),
+          sort_order:  idx + 1,
+        }))
+      : sourceItems.map(it => ({
+          quotation:   newQuotation._id,
+          description: it.description,
+          category:    it.category || '',
+          quantity:    it.quantity,
+          unit:        it.unit,
+          rate:        it.rate,
+          amount:      round2(it.quantity * it.rate),
+          sort_order:  it.sort_order,
+        }));
+
+    await QuotationItem.insertMany(allItems, { session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // ── Recalculate totals ──────────────────────────────────────────────────
+    const populated = await quoteService.recalculate_totals(
+      await Quotation.findById(newQuotation._id).populate('items')
+    );
+
+    // ── Return full populated copy ──────────────────────────────────────────
+    const result = await Quotation.findById(newQuotation._id)
+      .populate({ path: 'project', populate: { path: 'client' } })
+      .populate('items');
+
+    const obj = result.toJSON();
+    obj.project_name = result.project ? result.project.name : null;
+    obj.client_name  = result.project?.client?.full_name ?? null;
+
+    await createNotification({
+      event_type: 'quotation_created',
+      title:      'Quotation Copied',
+      message:    `Quotation ${newQuoteNumber} created as copy of ${baseNumber}`,
+      reference_type: 'quotation',
+      reference_id:   String(newQuotation._id),
+    });
+
+    return res.status(201).json(obj);
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error('copy_quotation error:', err);
+    return res.status(500).json({ detail: err.message || 'Copy failed.' });
+  }
+};

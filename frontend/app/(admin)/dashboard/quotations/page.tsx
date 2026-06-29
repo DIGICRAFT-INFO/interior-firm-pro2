@@ -5,7 +5,7 @@ import {
   FileSpreadsheet, Printer, Mail, MessageCircle,
   CheckCircle, RotateCcw, Search, ChevronDown,
   User, Building2, UserPlus, FolderPlus, Library,
-  ArrowRight, Save, Package
+  ArrowRight, Save, Package, Copy, PlusCircle, MinusCircle
 } from "lucide-react";
 import { getGstEnabledLocal } from "@/lib/gstToggle";
 
@@ -406,6 +406,16 @@ export default function QuotationsPage() {
 
   const [gstEnabled, setGstEnabled] = useState(true);
 
+  // ── Copy Modal State ────────────────────────────────────────────────────────
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+  const [copySourceQuotation, setCopySourceQuotation] = useState<any>(null);
+  const [copySubmitting, setCopySubmitting] = useState(false);
+  const [copyForm, setCopyForm] = useState<{
+    valid_until: string;
+    notes: string;
+    items: Array<{ _key: string; description: string; category: string; quantity: string; unit: string; rate: string }>;
+  }>({ valid_until: "", notes: "", items: [] });
+
   useEffect(() => {
     setGstEnabled(getGstEnabledLocal(true));
 
@@ -614,6 +624,82 @@ const igst = gstEnabled && useIgst
     finally { setSubmitting(false); }
   }
 
+  // ── Copy Modal Handlers ────────────────────────────────────────────────────
+  async function openCopyModal(q: Quotation) {
+    const res = await fetch(`${API_BASE}/quotations/${q.id}/`, { headers: getAuthHeaders() });
+    const full = await res.json();
+    setCopySourceQuotation(full);
+    const today = new Date().toISOString().split("T")[0];
+    const validUntil = new Date();
+    validUntil.setDate(validUntil.getDate() + 30);
+    setCopyForm({
+      valid_until: full.valid_until ? full.valid_until.split("T")[0] : validUntil.toISOString().split("T")[0],
+      notes: full.notes || "",
+      items: (full.items || []).map((it: any, i: number) => ({
+        _key: `item_${i}_${Date.now()}`,
+        description: it.description || "",
+        category: it.category || "",
+        quantity: String(it.quantity || "1"),
+        unit: it.unit || "",
+        rate: String(it.rate || "0"),
+      })),
+    });
+    setIsCopyModalOpen(true);
+  }
+
+  function updateCopyItem(key: string, field: string, value: string) {
+    setCopyForm(prev => ({
+      ...prev,
+      items: prev.items.map(it => it._key === key ? { ...it, [field]: value } : it),
+    }));
+  }
+
+  function addCopyItem() {
+    setCopyForm(prev => ({
+      ...prev,
+      items: [...prev.items, { _key: `new_${Date.now()}`, description: "", category: "", quantity: "1", unit: "", rate: "0" }],
+    }));
+  }
+
+  function removeCopyItem(key: string) {
+    setCopyForm(prev => ({
+      ...prev,
+      items: prev.items.filter(it => it._key !== key),
+    }));
+  }
+
+  async function submitCopyQuotation() {
+    if (!copySourceQuotation?.id) return;
+    setCopySubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/quotations/${copySourceQuotation.id}/copy/`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          valid_until: copyForm.valid_until || undefined,
+          notes: copyForm.notes,
+          items: copyForm.items.map(it => ({
+            description: it.description,
+            category: it.category,
+            quantity: it.quantity,
+            unit: it.unit,
+            rate: it.rate,
+          })),
+        }),
+      });
+      handleUnauth(res.status);
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Copy failed"); }
+      setIsCopyModalOpen(false);
+      setCopySourceQuotation(null);
+      await fetchQuotations();
+      showToast("Quotation copied successfully!", "success");
+    } catch (e: any) {
+      showToast(e?.message || "Copy failed", "error");
+    } finally {
+      setCopySubmitting(false);
+    }
+  }
+
   // ── Delete / Approve / Revise / PDF / Excel / Email / WA ──────────────────
   async function handleDelete(id: string) {
     if (!confirm("Delete?")) return;
@@ -761,6 +847,9 @@ const igst = gstEnabled && useIgst
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => openCopyModal(q)} title="Copy & Edit Quotation" className="p-2 text-[#9A8F82] hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors">
+                        <Copy size={14} />
+                      </button>
                       <button onClick={() => openEdit(q.id)} title="Edit" className="p-2 text-[#9A8F82] hover:text-[#C8922A] hover:bg-[#FDF3E3] rounded-lg transition-colors"><Edit3 size={14} /></button>
                       {["draft", "sent"].includes(q.status) && (
                         <button onClick={() => handleApprove(q.id)} title="Approve" disabled={actionId === `approve_${q.id}`} className="p-2 text-[#9A8F82] hover:text-[#10B981] hover:bg-[#ECFDF5] rounded-lg transition-colors">
@@ -1042,6 +1131,184 @@ const igst = gstEnabled && useIgst
                 className="w-full bg-[#C8922A] hover:bg-[#B07A20] disabled:opacity-60 text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 text-[14px]">
                 {submitting ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                 {editingId ? "Update Quotation" : "Create Quotation"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════════
+          COPY MODAL: Copy & Edit Quotation
+      ════════════════════════════════════════════════════════ */}
+      {isCopyModalOpen && copySourceQuotation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-[#EDE8DF] w-full max-w-3xl max-h-[92vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#EDE8DF] bg-[#FAF8F5] rounded-t-2xl">
+              <div>
+                <h2 className="text-[15px] font-bold text-[#1C1C1C]">Copy Quotation</h2>
+                <p className="text-[11px] text-[#9A8F82] mt-0.5">
+                  Source: <span className="font-semibold text-[#C8922A]">{copySourceQuotation.quote_number}</span>
+                  {" "}→ will create <span className="font-semibold text-[#C8922A]">{copySourceQuotation.quote_number}-C1</span> (or next suffix)
+                </p>
+              </div>
+              <button onClick={() => setIsCopyModalOpen(false)} className="text-[#9A8F82] hover:text-red-500">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Scrollable body */}
+            <div className="overflow-y-auto flex-1 p-6 space-y-5">
+              {/* Meta fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Client</label>
+                  <div className="px-3 py-2 bg-[#FAF8F5] border border-[#EDE8DF] rounded-lg text-[13px] text-[#6B6259]">
+                    {copySourceQuotation.client_name || "—"}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Project</label>
+                  <div className="px-3 py-2 bg-[#FAF8F5] border border-[#EDE8DF] rounded-lg text-[13px] text-[#6B6259]">
+                    {copySourceQuotation.project_name || "—"}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Valid Until</label>
+                  <input
+                    type="date"
+                    value={copyForm.valid_until}
+                    onChange={(e) => setCopyForm(p => ({ ...p, valid_until: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A]"
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Notes</label>
+                <textarea
+                  rows={2}
+                  value={copyForm.notes}
+                  onChange={(e) => setCopyForm(p => ({ ...p, notes: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A] resize-none"
+                  placeholder="Terms, remarks..."
+                />
+              </div>
+
+              {/* Line items */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider">Line Items</label>
+                  <button
+                    onClick={addCopyItem}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-[#C8922A] hover:underline"
+                  >
+                    <PlusCircle size={13} /> Add Row
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-[#EDE8DF]">
+                  <table className="w-full min-w-[700px] text-[12px]">
+                    <thead className="bg-[#FAF8F5]">
+                      <tr>
+                        {["Description", "Category", "Qty", "Unit", "Rate (₹)", "Amount (₹)", ""].map((h) => (
+                          <th key={h} className="px-3 py-2 text-left text-[10px] font-bold text-[#9A8F82] uppercase tracking-wider whitespace-nowrap">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F5F2ED]">
+                      {copyForm.items.map((item) => {
+                        const amt = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
+                        return (
+                          <tr key={item._key}>
+                            <td className="px-2 py-1.5">
+                              <input
+                                value={item.description}
+                                onChange={(e) => updateCopyItem(item._key, "description", e.target.value)}
+                                placeholder="e.g. Interior Design"
+                                className="w-full min-w-[140px] px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                value={item.category}
+                                onChange={(e) => updateCopyItem(item._key, "category", e.target.value)}
+                                placeholder="Furniture"
+                                className="w-full min-w-[100px] px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) => updateCopyItem(item._key, "quantity", e.target.value)}
+                                className="w-16 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                value={item.unit}
+                                onChange={(e) => updateCopyItem(item._key, "unit", e.target.value)}
+                                placeholder="sqft"
+                                className="w-16 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <input
+                                type="number"
+                                value={item.rate}
+                                onChange={(e) => updateCopyItem(item._key, "rate", e.target.value)}
+                                className="w-24 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
+                              />
+                            </td>
+                            <td className="px-3 py-1.5 font-semibold text-[#1C1C1C] whitespace-nowrap">
+                              ₹{amt.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <button
+                                onClick={() => removeCopyItem(item._key)}
+                                className="text-red-400 hover:text-red-600"
+                              >
+                                <MinusCircle size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Grand total preview */}
+                <div className="flex justify-end mt-3 pr-2">
+                  <div className="text-[13px] font-bold text-[#1C1C1C]">
+                    Grand Total: ₹
+                    {copyForm.items
+                      .reduce((s, it) => s + (parseFloat(it.quantity) || 0) * (parseFloat(it.rate) || 0), 0)
+                      .toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-[#EDE8DF] flex justify-end gap-3 bg-[#FAF8F5] rounded-b-2xl">
+              <button
+                onClick={() => setIsCopyModalOpen(false)}
+                className="px-4 py-2 rounded-lg border border-[#EDE8DF] text-[13px] font-semibold text-[#6B6259] hover:bg-[#F5F2ED]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitCopyQuotation}
+                disabled={copySubmitting}
+                className="px-5 py-2 rounded-lg bg-[#C8922A] text-white text-[13px] font-bold hover:bg-[#B07A20] disabled:opacity-60 flex items-center gap-2"
+              >
+                {copySubmitting ? <Loader2 size={14} className="animate-spin" /> : <Copy size={14} />}
+                Create Copy
               </button>
             </div>
           </div>
