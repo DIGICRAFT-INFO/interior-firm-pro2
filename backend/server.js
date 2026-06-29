@@ -15,8 +15,28 @@ const app = express();
 // 1. MIDDLEWARES
 // ==========================================
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://interior-firm-pro2.vercel.app'], 
-  credentials: true
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+
+    // Build allowed origins from env + hardcoded defaults
+    const allowed = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      process.env.FRONTEND_URL,
+      process.env.CORS_ORIGIN,
+    ].filter(Boolean);
+
+    if (allowed.includes(origin)) return callback(null, true);
+
+    // Allow any *.vercel.app or *.hostinger.com subdomain in dev/staging
+    if (/\.vercel\.app$/.test(origin) || /\.hostingersite\.com$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    callback(new Error(`CORS blocked: ${origin}`));
+  },
+  credentials: true,
 }));
 app.use(express.json()); // Body parser to read JSON data
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies

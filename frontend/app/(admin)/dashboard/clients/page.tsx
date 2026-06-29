@@ -285,7 +285,15 @@ export default function ClientsPage() {
           <p className="text-[#9A8F82] text-xs font-bold uppercase tracking-wider">
             New This Month
           </p>
-          <p className="text-2xl font-black mt-1 text-green-600">2</p>
+          <p className="text-2xl font-black mt-1 text-green-600">
+            {clients.filter((c) => {
+              const created = (c as any).created_at;
+              if (!created) return false;
+              const d = new Date(created);
+              const now = new Date();
+              return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+            }).length}
+          </p>
         </div>
       </div>
 
@@ -408,13 +416,17 @@ export default function ClientsPage() {
                           <div className="p-1 bg-[#FAF8F5] rounded">
                             <Mail size={12} className="text-[#9A8F82]" />
                           </div>
-                          {c.email || "No email"}
+                          {c.email ? (
+                            <a href={`mailto:${c.email}`} onClick={(e) => e.stopPropagation()} className="hover:text-[#C8922A] hover:underline transition-colors">{c.email}</a>
+                          ) : "No email"}
                         </div>
                         <div className="flex items-center gap-2 text-[12px] text-[#6B6259] font-medium">
                           <div className="p-1 bg-[#FAF8F5] rounded">
                             <Phone size={12} className="text-[#9A8F82]" />
                           </div>
-                          {c.phone || "No phone"}
+                          {c.phone ? (
+                            <a href={`tel:${c.phone}`} onClick={(e) => e.stopPropagation()} className="hover:text-[#C8922A] hover:underline transition-colors">{c.phone}</a>
+                          ) : "No phone"}
                         </div>
                       </div>
                     </td>

@@ -1,129 +1,260 @@
 const nodemailer = require('nodemailer');
 const NotificationLog = require('../models/notification_log');
+const pdfEngine = require('./pdf_engine_service');
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_HOST_USER, //
-    pass: process.env.EMAIL_HOST_PASSWORD // App Password
-  }
+    user: process.env.EMAIL_HOST_USER,
+    pass: process.env.EMAIL_HOST_PASSWORD, // Gmail App Password
+  },
 });
 
-const log_notification = async (channel, doc_type, doc_id, recipient, status, error = "") => {
-  await NotificationLog.create({ channel, doc_type, doc_id, recipient, status, error });
+const log_notification = async (channel, doc_type, doc_id, recipient, status, error = '') => {
+  try {
+    await NotificationLog.create({ channel, doc_type, doc_id, recipient, status, error });
+  } catch (_) { /* non-fatal */ }
 };
 
-const firm_name = () => "Interior Design Firm"; //
+// Safe "from" address — always valid
+const from_address = () => {
+  const user = process.env.EMAIL_HOST_USER || '';
+  const name = process.env.FIRM_NAME || 'Interior Firm';
+  return `"${name}" <${user}>`;
+};
 
-// 1. Send Invoice Email
+const backend_url = () =>
+  process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+
+// ── 1. Invoice Email (with real PDF attachment) ───────────────────────────────
 exports.send_invoice_email = async (invoice) => {
-  const client = invoice.project.client;
-  if (!client.email) return { success: false, error: "Client email not set" };
+  const client = invoice.project && invoice.project.client;
+  if (!client || !client.email) return { success: false, error: 'Client email not set' };
 
   try {
-    // Generate PDF logic mock (Replace with your actual PDFKit buffer stream)
-    const pdf_bytes = Buffer.from('Mock PDF Content'); 
-    
+    // Generate real PDF
+    let pdf_buffer = null;
+    try {
+      pdf_buffer = await pdfEngine.render_invoice_pdf(invoice);
+    } catch (pdfErr) {
+      console.warn('Invoice PDF generation failed for email:', pdfErr.message);
+    }
+
+    const attachments = pdf_buffer
+      ? [{ filename: `${invoice.invoice_number}.pdf`, content: pdf_buffer }]
+      : [];
+
     await transporter.sendMail({
-      from: process.env.DEFAULT_FROM_EMAIL || `Elegance Interiors <${process.env.EMAIL_HOST_USER}>`,
+      from: from_address(),
       to: client.email,
-      subject: `Invoice ${invoice.invoice_number} — ${firm_name()}`,
-      html: `<p>Please find attached Invoice ${invoice.invoice_number}. Download: ${process.env.BACKEND_URL}/api/v1/invoices/${invoice._id}/pdf/</p>`,
-      attachments: [{ filename: `${invoice.invoice_number}.pdf`, content: pdf_bytes }] //
+      subject: `Invoice ${invoice.invoice_number} — Payment Due`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <h2 style="color:#C8922A;">Invoice ${invoice.invoice_number}</h2>
+          <p>Dear <strong>${client.full_name || 'Client'}</strong>,</p>
+          <p>Please find your invoice attached. Below are the details:</p>
+          <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+            <tr style="background:#FAF8F5;">
+              <td style="padding:8px 12px;font-weight:bold;">Invoice #</td>
+              <td style="padding:8px 12px;">${invoice.invoice_number}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 12px;font-weight:bold;">Project</td>
+              <td style="padding:8px 12px;">${invoice.project.name || ''}</td>
+            </tr>
+            <tr style="background:#FAF8F5;">
+              <td style="padding:8px 12px;font-weight:bold;">Grand Total</td>
+              <td style="padding:8px 12px;color:#C8922A;font-weight:bold;">₹${Number(invoice.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 12px;font-weight:bold;">Balance Due</td>
+              <td style="padding:8px 12px;color:#EF4444;font-weight:bold;">₹${Number(invoice.balance_due || invoice.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          </table>
+          <p style="color:#666;font-size:13px;">Please make payment before the due date. If you have any questions, feel free to contact us.</p>
+          <hr style="border:none;border-top:1px solid #EDE8DF;margin:20px 0;">
+          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'Interior Firm'}</p>
+        </div>
+      `,
+      attachments,
     });
 
-    await log_notification("email", "invoice", invoice._id, client.email, "sent");
+    await log_notification('email', 'invoice', invoice._id, client.email, 'sent');
     return { success: true };
   } catch (error) {
-    await log_notification("email", "invoice", invoice._id, client.email, "failed", error.message);
+    await log_notification('email', 'invoice', invoice._id, client.email, 'failed', error.message);
     return { success: false, error: error.message };
   }
 };
+
+// ── 2. Quotation Email (with real PDF attachment) ─────────────────────────────
 exports.send_quotation_email = async (quotation) => {
-  const client = quotation.project.client;
-  if (!client.email) return { success: false, error: "Client email not set" };
+  const client = quotation.project && quotation.project.client;
+  if (!client || !client.email) return { success: false, error: 'Client email not set' };
 
   try {
+    let pdf_buffer = null;
+    try {
+      pdf_buffer = await pdfEngine.render_quotation_pdf(quotation);
+    } catch (pdfErr) {
+      console.warn('Quotation PDF generation failed for email:', pdfErr.message);
+    }
+
+    const attachments = pdf_buffer
+      ? [{ filename: `${quotation.quote_number}.pdf`, content: pdf_buffer }]
+      : [];
+
     await transporter.sendMail({
-      from: process.env.DEFAULT_FROM_EMAIL || `Elegance Interiors <${process.env.EMAIL_HOST_USER}>`,
+      from: from_address(),
       to: client.email,
-      subject: `Quotation ${quotation.quote_number} — ${firm_name()}`,
-      html: `<p>Please find your quotation ${quotation.quote_number} here: ${process.env.BACKEND_URL}/api/v1/quotations/${quotation._id}/pdf/</p>`,
+      subject: `Quotation ${quotation.quote_number} — ${quotation.project.name || ''}`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <h2 style="color:#C8922A;">Quotation ${quotation.quote_number}</h2>
+          <p>Dear <strong>${client.full_name || 'Client'}</strong>,</p>
+          <p>Please find your quotation attached. Grand Total: <strong style="color:#C8922A;">₹${Number(quotation.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></p>
+          <p style="color:#666;font-size:13px;">Kindly review and let us know your approval.</p>
+          <hr style="border:none;border-top:1px solid #EDE8DF;margin:20px 0;">
+          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'Interior Firm'}</p>
+        </div>
+      `,
+      attachments,
     });
-    await log_notification("email", "quotation", quotation._id, client.email, "sent");
+
+    await log_notification('email', 'quotation', quotation._id, client.email, 'sent');
     return { success: true };
   } catch (error) {
-    await log_notification("email", "quotation", quotation._id, client.email, "failed", error.message);
+    await log_notification('email', 'quotation', quotation._id, client.email, 'failed', error.message);
     return { success: false, error: error.message };
   }
 };
 
+// ── 3. Proposal Email (with real PDF attachment) ──────────────────────────────
 exports.send_proposal_email = async (proposal) => {
-  const client = proposal.project.client;
-  if (!client.email) return { success: false, error: "Client email not set" };
+  const client = proposal.project && proposal.project.client;
+  if (!client || !client.email) return { success: false, error: 'Client email not set' };
 
   try {
+    let pdf_buffer = null;
+    try {
+      pdf_buffer = await pdfEngine.render_proposal_pdf(proposal);
+    } catch (pdfErr) {
+      console.warn('Proposal PDF generation failed for email:', pdfErr.message);
+    }
+
+    const attachments = pdf_buffer
+      ? [{ filename: `${proposal.prop_number || 'proposal'}.pdf`, content: pdf_buffer }]
+      : [];
+
     await transporter.sendMail({
-      from: process.env.DEFAULT_FROM_EMAIL || `Elegance Interiors <${process.env.EMAIL_HOST_USER}>`,
+      from: from_address(),
       to: client.email,
-      subject: `Proposal: ${proposal.title} — ${firm_name()}`,
-      html: `<p>Please review your proposal <strong>${proposal.title}</strong> here: ${process.env.BACKEND_URL}/api/v1/proposals/${proposal._id}/pdf/</p>`,
+      subject: `Proposal: ${proposal.title} — ${process.env.FIRM_NAME || 'Interior Firm'}`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <h2 style="color:#C8922A;">${proposal.title}</h2>
+          <p>Dear <strong>${client.full_name || 'Client'}</strong>,</p>
+          <p>Please find your proposal attached. We hope this meets your requirements.</p>
+          <p style="color:#666;font-size:13px;">Kindly review and let us know if you have any questions.</p>
+          <hr style="border:none;border-top:1px solid #EDE8DF;margin:20px 0;">
+          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'Interior Firm'}</p>
+        </div>
+      `,
+      attachments,
     });
-    await log_notification("email", "proposal", proposal._id, client.email, "sent");
+
+    await log_notification('email', 'proposal', proposal._id, client.email, 'sent');
     return { success: true };
   } catch (error) {
-    await log_notification("email", "proposal", proposal._id, client.email, "failed", error.message);
+    await log_notification('email', 'proposal', proposal._id, client.email, 'failed', error.message);
     return { success: false, error: error.message };
   }
 };
 
+// ── 4. Payment Reminder Email ─────────────────────────────────────────────────
 exports.send_payment_reminder_email = async (invoice) => {
-  const client = invoice.project.client;
-  if (!client.email) return { success: false, error: "Client email not set" };
+  const client = invoice.project && invoice.project.client;
+  if (!client || !client.email) return { success: false, error: 'Client email not set' };
 
   try {
+    const balance = Number(invoice.balance_due || invoice.grand_total || 0);
+
     await transporter.sendMail({
-      from: process.env.DEFAULT_FROM_EMAIL || `Elegance Interiors <${process.env.EMAIL_HOST_USER}>`,
+      from: from_address(),
       to: client.email,
-      subject: `Payment Reminder: Invoice ${invoice.invoice_number} — ${firm_name()}`,
-      html: `<p>This is a reminder that Invoice ${invoice.invoice_number} is due. Please make payment at your earliest convenience.</p>`,
+      subject: `Payment Reminder — Invoice ${invoice.invoice_number}`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <h2 style="color:#EF4444;">Payment Reminder</h2>
+          <p>Dear <strong>${client.full_name || 'Client'}</strong>,</p>
+          <p>This is a friendly reminder that the following invoice is pending payment:</p>
+          <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+            <tr style="background:#FAF8F5;">
+              <td style="padding:8px 12px;font-weight:bold;">Invoice #</td>
+              <td style="padding:8px 12px;">${invoice.invoice_number}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 12px;font-weight:bold;">Balance Due</td>
+              <td style="padding:8px 12px;color:#EF4444;font-weight:bold;">₹${balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          </table>
+          <p style="color:#666;font-size:13px;">Please make payment at your earliest convenience. Contact us if you have any questions.</p>
+          <hr style="border:none;border-top:1px solid #EDE8DF;margin:20px 0;">
+          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'Interior Firm'}</p>
+        </div>
+      `,
     });
-    await log_notification("email", "invoice", invoice._id, client.email, "sent");
+
+    await log_notification('email', 'reminder', invoice._id, client.email, 'sent');
     return { success: true };
   } catch (error) {
-    await log_notification("email", "invoice", invoice._id, client.email, "failed", error.message);
+    await log_notification('email', 'reminder', invoice._id, client.email, 'failed', error.message);
     return { success: false, error: error.message };
   }
 };
-// ... Similar functions for send_quotation_email, send_payment_reminder_email, and send_proposal_email map exactly like above using transporter.sendMail() ...
 
-// 2. Send Portfolio Email (with PDF attachment + inline image links)
+// ── 5. Portfolio Email (with PDF attachment) ──────────────────────────────────
 exports.send_portfolio_email = async (portfolio, recipient_email, pdf_buffer) => {
-  if (!recipient_email) return { success: false, error: "Recipient email not set" };
+  if (!recipient_email) return { success: false, error: 'Recipient email not set' };
 
   try {
-    const base = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+    const base = backend_url();
     const image_links = (portfolio.images || [])
-      .map((img) => `<img src="${img.file_url.startsWith('http') ? img.file_url : base + img.file_url}" width="260" style="margin:6px;border-radius:6px;" />`)
+      .slice(0, 6) // max 6 inline images in email
+      .map((img) => {
+        const src = img.file_url.startsWith('http') ? img.file_url : `${base}${img.file_url}`;
+        return `<img src="${src}" width="260" style="margin:6px;border-radius:8px;max-width:100%;" />`;
+      })
       .join('');
 
+    const client = portfolio.project && portfolio.project.client;
+    const client_name = client ? client.full_name : 'Client';
+
     await transporter.sendMail({
-      from: process.env.DEFAULT_FROM_EMAIL || `${firm_name()} <${process.env.EMAIL_HOST_USER}>`,
+      from: from_address(),
       to: recipient_email,
-      subject: `${portfolio.title} — Portfolio from ${firm_name()}`,
-      html: `<p>Hi,</p><p>Here's a look at the work — <strong>${portfolio.title}</strong>.</p>
-             ${portfolio.description ? `<p>${portfolio.description}</p>` : ''}
-             <div>${image_links}</div>
-             <p>A PDF copy is attached for your records.</p>`,
+      subject: `Portfolio: ${portfolio.title} — ${process.env.FIRM_NAME || 'Interior Firm'}`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <h2 style="color:#C8922A;">${portfolio.title}</h2>
+          <p>Dear <strong>${client_name}</strong>,</p>
+          <p>We are pleased to share a portfolio showcase of our work.</p>
+          ${portfolio.description ? `<p style="color:#555;">${portfolio.description}</p>` : ''}
+          ${image_links ? `<div style="margin:16px 0;">${image_links}</div>` : ''}
+          <p style="color:#666;font-size:13px;">A complete PDF version is attached for your reference.</p>
+          <hr style="border:none;border-top:1px solid #EDE8DF;margin:20px 0;">
+          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'Interior Firm'}</p>
+        </div>
+      `,
       attachments: pdf_buffer
         ? [{ filename: `${portfolio.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`, content: pdf_buffer }]
         : [],
     });
 
-    await log_notification("email", "portfolio", portfolio._id, recipient_email, "sent");
+    await log_notification('email', 'portfolio', portfolio._id, recipient_email, 'sent');
     return { success: true };
   } catch (error) {
-    await log_notification("email", "portfolio", portfolio._id, recipient_email, "failed", error.message);
+    await log_notification('email', 'portfolio', portfolio._id, recipient_email, 'failed', error.message);
     return { success: false, error: error.message };
   }
 };

@@ -25,6 +25,9 @@ router.route('/numbering/')
   .get(ctrl.get_document_numbering)
   .put(is_owner, ctrl.update_document_numbering);
 
+// Logo upload
+router.post('/brand/logo/', is_owner, ctrl.logo_upload_middleware, ctrl.upload_logo);
+
 // -------------------------------------------------------------
 // Milestones Routes
 // -------------------------------------------------------------

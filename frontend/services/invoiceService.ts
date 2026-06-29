@@ -290,8 +290,8 @@ export async function sendInvoiceWhatsApp(id: string): Promise<void> {
 export async function sendReminder(invoiceId: string, channel: "whatsapp" | "email"): Promise<void> {
   const endpoint =
     channel === "whatsapp"
-      ? `${API_BASE_URL}/notifications/whatsapp/reminder/${invoiceId}/send/`
-      : `${API_BASE_URL}/notifications/email/reminder/${invoiceId}/send/`;
+      ? `${API_BASE_URL}/notifications/whatsapp/reminder/${invoiceId}/`
+      : `${API_BASE_URL}/notifications/email/reminder/${invoiceId}/`;
   const res = await fetch(endpoint, {
     method: "POST",
     headers: { Authorization: `Bearer ${getToken()}` },

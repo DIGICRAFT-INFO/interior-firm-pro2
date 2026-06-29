@@ -176,7 +176,7 @@ export async function uploadPortfolioImages(
   files.forEach((file) => formData.append("files", file));
   (captions || []).forEach((c) => formData.append("captions", c));
 
-  const res = await fetch(`${PORTFOLIO_URL}${id}/images`, {
+  const res = await fetch(`${PORTFOLIO_URL}${id}/images/`, {
     method: "POST",
     headers: getAuthHeadersNoJSON(), // don't set Content-Type — browser sets multipart boundary
     body: formData,
@@ -192,7 +192,7 @@ export async function uploadPortfolioImages(
 // ─── DELETE: Remove a single image ─────────────────────────────────────────────
 
 export async function deletePortfolioImage(id: string, imageId: string): Promise<void> {
-  const res = await fetch(`${PORTFOLIO_URL}${id}/images/${imageId}`, {
+  const res = await fetch(`${PORTFOLIO_URL}${id}/images/${imageId}/`, {
     method: "DELETE",
     headers: getAuthHeaders(),
   });
@@ -211,9 +211,9 @@ export async function uploadPortfolioDocuments(
   files.forEach((file) => formData.append("files", file));
   (titles || []).forEach((t) => formData.append("titles", t));
 
-  const res = await fetch(`${PORTFOLIO_URL}${id}/documents`, {
+  const res = await fetch(`${PORTFOLIO_URL}${id}/documents/`, {
     method: "POST",
-    headers: getAuthHeadersNoJSON(), // don't set Content-Type — browser sets multipart boundary
+    headers: getAuthHeadersNoJSON(),
     body: formData,
   });
   handleUnauthorized(res.status);
@@ -227,7 +227,7 @@ export async function uploadPortfolioDocuments(
 // ─── DELETE: Remove a single document ──────────────────────────────────────────
 
 export async function deletePortfolioDocument(id: string, docId: string): Promise<void> {
-  const res = await fetch(`${PORTFOLIO_URL}${id}/documents/${docId}`, {
+  const res = await fetch(`${PORTFOLIO_URL}${id}/documents/${docId}/`, {
     method: "DELETE",
     headers: getAuthHeaders(),
   });
@@ -239,7 +239,7 @@ export async function deletePortfolioDocument(id: string, docId: string): Promis
 
 export async function downloadPortfolioPDF(id: string, title: string): Promise<void> {
   const token = getToken();
-  const res = await fetch(`${PORTFOLIO_URL}${id}/pdf`, {
+  const res = await fetch(`${PORTFOLIO_URL}${id}/pdf/`, {
     method: "GET",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
@@ -279,7 +279,7 @@ export async function sendPortfolio(
     else body.recipient_phone = recipient;
   }
 
-  const res = await fetch(`${PORTFOLIO_URL}${id}/send`, {
+  const res = await fetch(`${PORTFOLIO_URL}${id}/send/`, {
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify(body),

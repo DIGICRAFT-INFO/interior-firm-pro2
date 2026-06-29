@@ -137,10 +137,11 @@ function InvoiceDetailPanel({
     setReminderLoading(true);
     setReminderMenu(false);
     try {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
       const endpoint =
         channel === "whatsapp"
-          ? `/api/v1/notifications/whatsapp/reminder/${inv.id}/`
-          : `/api/v1/notifications/email/reminder/${inv.id}/`;
+          ? `${API_BASE_URL}/notifications/whatsapp/reminder/${inv.id}/`
+          : `${API_BASE_URL}/notifications/email/reminder/${inv.id}/`;
       await fetch(endpoint, {
         method: "POST",
         headers: { Authorization: `Bearer ${token()}` },

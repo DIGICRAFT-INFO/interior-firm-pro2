@@ -843,7 +843,13 @@ const igst = gstEnabled && useIgst
                     {[["Phone", selectedClient.phone], ["Email", selectedClient.email || "—"], ["GSTIN", selectedClient.gstin || "Not registered"]].map(([l, v]) => (
                       <div key={l}>
                         <p className="text-[10px] font-bold text-[#9A8F82] uppercase">{l}</p>
-                        <p className="text-[12px] font-medium text-[#1C1C1C] mt-0.5 truncate">{v}</p>
+                        <p className="text-[12px] font-medium text-[#1C1C1C] mt-0.5 truncate">
+                          {l === "Email" && v !== "—" ? (
+                            <a href={`mailto:${v}`} className="hover:text-[#C8922A] hover:underline">{v}</a>
+                          ) : l === "Phone" && v ? (
+                            <a href={`tel:${v}`} className="hover:text-[#C8922A] hover:underline">{v}</a>
+                          ) : v}
+                        </p>
                       </div>
                     ))}
                     <div className="col-span-3">

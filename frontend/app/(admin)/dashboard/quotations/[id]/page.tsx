@@ -5,6 +5,14 @@ import { Plus, Trash2, Save, ArrowLeft, Loader2, CheckCircle2 } from "lucide-rea
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
+
+function getAuthHeaders(): HeadersInit {
+  if (typeof window === "undefined") return { "Content-Type": "application/json" };
+  const token = localStorage.getItem("access") || localStorage.getItem("access_token") || localStorage.getItem("token");
+  return { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+}
+
 export default function QuotationEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -19,7 +27,7 @@ export default function QuotationEditorPage({ params }: { params: Promise<{ id: 
 
   useEffect(() => {
     if (id === "new") { setLoading(false); return; }
-    fetch(`https://interior-firm-pro2.onrender.com/api/v1/quotations/${id}/`)
+    fetch(`${API_BASE}/quotations/${id}/`, { headers: getAuthHeaders() })
       .then(res => res.json())
       .then(data => {
         setQuotation(data);
@@ -40,7 +48,7 @@ export default function QuotationEditorPage({ params }: { params: Promise<{ id: 
   const handleSave = async () => {
     setSaving(true);
     const isNew = id === "new";
-    const url = isNew ? "https://interior-firm-pro2.onrender.com/api/v1/quotations/" : `https://interior-firm-pro2.onrender.com/api/v1/quotations/${id}/`;
+    const url = isNew ? `${API_BASE}/quotations/` : `${API_BASE}/quotations/${id}/`;
     
     const payload = {
       ...quotation,
@@ -54,7 +62,7 @@ export default function QuotationEditorPage({ params }: { params: Promise<{ id: 
     try {
       const res = await fetch(url, {
         method: isNew ? "POST" : "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload)
       });
       if (res.ok) {

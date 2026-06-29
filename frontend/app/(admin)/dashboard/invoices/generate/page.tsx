@@ -187,8 +187,9 @@ function getAuthHeaders(): HeadersInit {
 }
 
 const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "https://interior-firm-pro2.onrender.com/api/v1";
+  "http://localhost:5000/api/v1";
 
 // ─── Fmt ──────────────────────────────────────────────────────────────────────
 const fmt = (n: any) =>

@@ -102,10 +102,40 @@ exports.send_both_reminders = async (req, res) => {
   const invoice = await Invoice.findById(req.params.pk).populate({ path: 'project', populate: { path: 'client' } });
   if (!invoice) return res.status(404).json({ detail: 'Invoice not found.' });
 
-  const wa_result = await waService.send_payment_reminder_whatsapp(invoice);
+  const wa_result    = await waService.send_payment_reminder_whatsapp(invoice);
   const email_result = await emailService.send_payment_reminder_email(invoice);
 
   res.json({ whatsapp: wa_result, email: email_result });
+};
+
+// Single-channel reminder: WhatsApp
+exports.send_reminder_whatsapp = async (req, res) => {
+  try {
+    const invoice = await Invoice.findById(req.params.pk)
+      .populate({ path: 'project', populate: { path: 'client' } });
+    if (!invoice) return res.status(404).json({ detail: 'Invoice not found.' });
+
+    const result = await waService.send_payment_reminder_whatsapp(invoice);
+    if (result.success) return res.json({ detail: 'WhatsApp reminder sent.', ...result });
+    return res.status(502).json({ detail: result.error });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+// Single-channel reminder: Email
+exports.send_reminder_email = async (req, res) => {
+  try {
+    const invoice = await Invoice.findById(req.params.pk)
+      .populate({ path: 'project', populate: { path: 'client' } });
+    if (!invoice) return res.status(404).json({ detail: 'Invoice not found.' });
+
+    const result = await emailService.send_payment_reminder_email(invoice);
+    if (result.success) return res.json({ detail: 'Email reminder sent.' });
+    return res.status(502).json({ detail: result.error });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 };
 
 // Notification Logs

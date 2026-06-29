@@ -174,7 +174,11 @@
 <body>
   <div class="header">
     <div>
-      <img src="http://localhost:3000/logo2.png" alt="Company Logo" style="height: 60px; width: auto; object-fit: contain;">
+      <% if (logo_base64) { %>
+      <img src="<%= logo_base64 %>" alt="Company Logo" style="height: 60px; width: auto; object-fit: contain;">
+      <% } else if (brand && brand.firm_name) { %>
+      <div style="font-size:20px; font-weight:700; color:<%= brand.primary_color || '#C8922A' %>;"><%= brand.firm_name %></div>
+      <% } %>
       <% if (brand && brand.tagline) { %>
         <div class="company-tagline"><%= brand.tagline %></div>
       <% } %>

@@ -1,4 +1,31 @@
 const { TaxSettings, BankDetails, BrandTheme, MilestoneTemplate, DocumentNumbering } = require('../models/settings');
+const multer = require('multer');
+const path   = require('path');
+const fs     = require('fs');
+
+// ── Logo upload (multer config) ───────────────────────────────────────────────
+const logo_storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, '..', 'uploads', 'brand');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `logo${ext}`);
+  },
+});
+const logo_upload = multer({
+  storage: logo_storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.png', '.jpg', '.jpeg', '.svg', '.webp'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error('Only image files are allowed (png, jpg, jpeg, svg, webp)'));
+  },
+});
+exports.logo_upload_middleware = logo_upload.single('logo');
 
 // --- SINGLETON HELPER ---
 const getSingleton = async (Model, res) => {
@@ -78,6 +105,26 @@ exports.delete_milestone = async (req, res) => {
     const milestone = await MilestoneTemplate.findByIdAndDelete(req.params.pk);
     if (!milestone) return res.status(404).json({ detail: 'Not found.' });
     res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// --- LOGO UPLOAD ---
+exports.upload_logo = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+
+    // Store relative path in DB (e.g. "uploads/brand/logo.png")
+    const logo_path = `uploads/brand/${req.file.filename}`;
+
+    const brand = await BrandTheme.findOneAndUpdate(
+      {},
+      { logo: logo_path },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    res.json({ logo: logo_path, brand });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

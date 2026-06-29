@@ -1354,7 +1354,11 @@ const payload = {
                     <p
                       className={`text-[13px] font-medium text-[#1C1C1C] break-words leading-relaxed ${upper ? "uppercase" : ""}`}
                     >
-                      {value}
+                      {label === "Email Address" && value !== "N/A" ? (
+                        <a href={`mailto:${value}`} className="hover:text-[#C8922A] hover:underline transition-colors">{value}</a>
+                      ) : label === "Phone Number" && value !== "N/A" ? (
+                        <a href={`tel:${value}`} className="hover:text-[#C8922A] hover:underline transition-colors">{value}</a>
+                      ) : value}
                     </p>
                   </div>
                 </div>
