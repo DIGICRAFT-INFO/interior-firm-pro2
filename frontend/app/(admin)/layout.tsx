@@ -19,7 +19,7 @@ import {
   Menu,
   X,
   ShieldAlert,
-  MessageSquare
+  MessageSquare,
 } from "lucide-react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import "./../globals.css";
@@ -36,19 +36,64 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Clients", href: "/dashboard/clients", icon: Users, roles: ["owner", "manager", "designer"] },
-  { label: "Projects", href: "/dashboard/projects", icon: FolderOpen, roles: ["owner", "manager", "designer"] },
-  { label: "Proposals", href: "/dashboard/proposals", icon: FileText, roles: ["owner", "manager", "designer"] },
-  { label: "Quotations", href: "/dashboard/quotations", icon: Receipt, roles: ["owner", "manager"] },
-  { label: "Invoices", href: "/dashboard/invoices", icon: Receipt, roles: ["owner", "manager", "accountant"] },
-  { label: "Portfolio", href: "/dashboard/portfolio", icon: Receipt, roles: ["owner", "manager"] },
-  { label: "Payments", href: "/dashboard/payments", icon: CreditCard, roles: ["owner", "manager", "accountant"] },
-  { label: "Pending Users", href: "/dashboard/pending-users", icon: ShieldAlert, roles: ["owner", "manager"] },
+  {
+    label: "Clients",
+    href: "/dashboard/clients",
+    icon: Users,
+    roles: ["owner", "manager", "designer"],
+  },
+  {
+    label: "Services",
+    href: "/dashboard/services",
+    icon: Layers,
+    roles: ["owner", "manager", "designer"],
+  },
+  {
+    label: "Projects",
+    href: "/dashboard/projects",
+    icon: FolderOpen,
+    roles: ["owner", "manager", "designer"],
+  },
+  {
+    label: "Proposals",
+    href: "/dashboard/proposals",
+    icon: FileText,
+    roles: ["owner", "manager", "designer"],
+  },
+  {
+    label: "Quotations",
+    href: "/dashboard/quotations",
+    icon: Receipt,
+    roles: ["owner", "manager"],
+  },
+  {
+    label: "Invoices",
+    href: "/dashboard/invoices",
+    icon: Receipt,
+    roles: ["owner", "manager", "accountant"],
+  },
+  {
+    label: "Portfolio",
+    href: "/dashboard/portfolio",
+    icon: Receipt,
+    roles: ["owner", "manager"],
+  },
+  {
+    label: "Payments",
+    href: "/dashboard/payments",
+    icon: CreditCard,
+    roles: ["owner", "manager", "accountant"],
+  },
+  {
+    label: "Pending Users",
+    href: "/dashboard/pending-users",
+    icon: ShieldAlert,
+    roles: ["owner", "manager"],
+  },
 
   { label: "Enquiries", href: "/dashboard/enquiry", icon: MessageSquare },
   { label: "History", href: "/dashboard/history", icon: History },
   { label: "Notifications", href: "/dashboard/notifications", icon: BellRing },
-  { label: "Master Services", href: "/dashboard/services", icon: Layers, roles: ["owner", "manager", "designer"] },
 ];
 
 export default function DashboardLayout({
@@ -68,7 +113,8 @@ export default function DashboardLayout({
   const isAdmin = userRole ? adminRoles.includes(userRole) : false;
 
   useEffect(() => {
-    const token = localStorage.getItem("access") || localStorage.getItem("token");
+    const token =
+      localStorage.getItem("access") || localStorage.getItem("token");
     if (!token) {
       localStorage.clear(); // Clear any corrupted/stale data
       router.replace("/login");
@@ -79,10 +125,13 @@ export default function DashboardLayout({
       const userStr = localStorage.getItem("user");
       if (userStr) {
         const user = JSON.parse(userStr);
-        
+
         // Basic sanitization: Ensure role is lowercase and valid string
-        const role = typeof user.role === "string" ? user.role.toLowerCase().trim() : "designer";
-        
+        const role =
+          typeof user.role === "string"
+            ? user.role.toLowerCase().trim()
+            : "designer";
+
         setUserRole(role);
         setUserName(user.full_name || "User");
       } else {
@@ -122,17 +171,25 @@ export default function DashboardLayout({
   const checkPathAccess = (): boolean => {
     // Settings: admin only
     if (pathname.includes("/settings")) return isAdmin;
-    
+
     // Quotations, Portfolio, Pending Users: manager/owner only
-    if (pathname.includes("/quotations") || pathname.includes("/portfolio") || pathname.includes("/pending-users")) {
+    if (
+      pathname.includes("/quotations") ||
+      pathname.includes("/portfolio") ||
+      pathname.includes("/pending-users")
+    ) {
       return userRole === "owner" || userRole === "manager";
     }
-    
+
     // Invoices, Payments: admin (manager/owner) or accountant
     if (pathname.includes("/invoices") || pathname.includes("/payments")) {
-      return userRole === "owner" || userRole === "manager" || userRole === "accountant";
+      return (
+        userRole === "owner" ||
+        userRole === "manager" ||
+        userRole === "accountant"
+      );
     }
-    
+
     return true;
   };
 
@@ -140,12 +197,15 @@ export default function DashboardLayout({
     return (
       <div className="flex flex-col items-center justify-center h-screen w-full text-center bg-[#FAF8F5] p-6">
         <Lock size={50} className="text-[#D04040] mb-4 animate-bounce" />
-        <h2 className="text-2xl font-bold text-[#1C1C1C] mb-2">Access Denied (403)</h2>
+        <h2 className="text-2xl font-bold text-[#1C1C1C] mb-2">
+          Access Denied (403)
+        </h2>
         <p className="text-[#6B6259] max-w-sm mb-6">
-          You don&apos;t have permission to access this secure zone. Your attempt has been logged.
+          You don&apos;t have permission to access this secure zone. Your
+          attempt has been logged.
         </p>
-        <button 
-          onClick={() => router.replace("/dashboard")} 
+        <button
+          onClick={() => router.replace("/dashboard")}
           className="px-5 py-2.5 bg-[#C8922A] text-white rounded-lg font-medium text-sm hover:bg-[#b07f22] transition-colors"
         >
           Back to Safe Zone
@@ -156,33 +216,36 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-screen bg-[#FAF8F5] font-sans overflow-hidden relative">
-      
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/40 z-40 md:hidden transition-opacity"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
-      <aside className={`
+      <aside
+        className={`
         fixed inset-y-0 left-0 z-50 w-[220px] bg-white border-r border-[#EDE8DF] flex flex-col shrink-0
         transform transition-transform duration-300 ease-in-out
         md:relative md:transform-none
         ${isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
-      `}>
+      `}
+      >
         {/* Logo */}
         <div className="px-5 py-5 border-b border-[#EDE8DF] flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img 
-              src="/logo2.png" 
-              alt="Logo" 
-              className="rounded-lg object-contain" 
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} 
+            <img
+              src="/logo2.png"
+              alt="Logo"
+              className="rounded-lg object-contain"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
             />
           </div>
-          <button 
+          <button
             onClick={() => setIsSidebarOpen(false)}
             className="p-1 text-[#6B6259] hover:bg-[#FAF8F5] rounded-md md:hidden"
           >
@@ -200,7 +263,7 @@ export default function DashboardLayout({
 
             const Icon = item.icon;
             const active = pathname === item.href;
-            
+
             return (
               <Link
                 key={item.href}
@@ -211,7 +274,10 @@ export default function DashboardLayout({
                     : "text-[#6B6259] hover:bg-[#FAF8F5] hover:text-[#1C1C1C]"
                 }`}
               >
-                <Icon size={16} className={active ? "text-[#C8922A]" : "text-[#9A8F82]"} />
+                <Icon
+                  size={16}
+                  className={active ? "text-[#C8922A]" : "text-[#9A8F82]"}
+                />
                 {item.label}
               </Link>
             );
@@ -224,27 +290,31 @@ export default function DashboardLayout({
             <Link
               href="/dashboard/settings"
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all ${
-                pathname === "/dashboard/settings" ? "bg-[#FDF3E3] text-[#C8922A]" : "text-[#6B6259] hover:bg-[#FAF8F5]"
+                pathname === "/dashboard/settings"
+                  ? "bg-[#FDF3E3] text-[#C8922A]"
+                  : "text-[#6B6259] hover:bg-[#FAF8F5]"
               }`}
             >
               <Settings size={16} className="text-[#9A8F82]" />
               Settings
             </Link>
           )}
-          
+
           {userRole === "accountant" && (
             <Link
               href="/dashboard/settings"
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all ${
-                pathname === "/dashboard/settings" ? "bg-[#FDF3E3] text-[#C8922A]" : "text-[#6B6259] hover:bg-[#FAF8F5]"
+                pathname === "/dashboard/settings"
+                  ? "bg-[#FDF3E3] text-[#C8922A]"
+                  : "text-[#6B6259] hover:bg-[#FAF8F5]"
               }`}
             >
               <Settings size={16} className="text-[#9A8F82]" />
               Settings
             </Link>
           )}
-          
-          <button 
+
+          <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-[#D04040] hover:bg-[#FFF0F0]"
           >
@@ -258,7 +328,6 @@ export default function DashboardLayout({
       <div className="flex-1 flex flex-col overflow-hidden w-full">
         {/* Header */}
         <header className="h-[60px] bg-white border-b border-[#EDE8DF] flex items-center px-4 md:px-6 gap-4 shrink-0 justify-between md:justify-end">
-          
           <button
             onClick={() => setIsSidebarOpen(true)}
             className="p-2 text-[#6B6259] hover:bg-[#FAF8F5] rounded-lg md:hidden"
@@ -277,7 +346,9 @@ export default function DashboardLayout({
                 <span className="text-[12px] font-bold text-[#1C1C1C] leading-none truncate">
                   {userName}
                 </span>
-                <span className="text-[10px] text-[#9A8F82] capitalize truncate">{userRole}</span>
+                <span className="text-[10px] text-[#9A8F82] capitalize truncate">
+                  {userRole}
+                </span>
               </div>
             </div>
           </div>
