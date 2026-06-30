@@ -26,6 +26,20 @@ const from_address = () => {
 const backend_url = () =>
   process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
 
+// Safely embed plain-text content inside HTML email bodies.
+// Escapes HTML special characters (so stray < > & don't break the markup,
+// the same bug that previously truncated PDF content) and converts
+// newlines to <br> so paragraph breaks the client typed are preserved.
+const escape_html_for_email = (text) => {
+  if (!text) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\n/g, '<br>');
+};
+
 // ── 1. Invoice Email (with real PDF attachment) ───────────────────────────────
 exports.send_invoice_email = async (invoice) => {
   const client = invoice.project && invoice.project.client;
@@ -154,7 +168,11 @@ exports.send_proposal_email = async (proposal) => {
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
           <h2 style="color:#C8922A;">${proposal.title}</h2>
           <p>Dear <strong>${client.full_name || 'Client'}</strong>,</p>
-          <p>Please find your proposal attached. We hope this meets your requirements.</p>
+          <p>Please find your proposal details below${pdf_buffer ? ' (and attached as a PDF for your records)' : ''}.</p>
+          <div style="margin:18px 0;padding:16px 18px;background:#FAF8F5;border-left:3px solid #C8922A;border-radius:4px;font-size:13px;color:#333;line-height:1.6;white-space:normal;">
+            ${proposal.content && proposal.content.trim() !== '' ? escape_html_for_email(proposal.content) : '<span style="color:#999;">No content provided.</span>'}
+          </div>
+          ${proposal.notes ? `<p style="color:#666;font-size:12px;"><strong>Notes:</strong> ${escape_html_for_email(proposal.notes)}</p>` : ''}
           <p style="color:#666;font-size:13px;">Kindly review and let us know if you have any questions.</p>
           <hr style="border:none;border-top:1px solid #EDE8DF;margin:20px 0;">
           <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'Interior Firm'}</p>
