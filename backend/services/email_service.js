@@ -19,7 +19,7 @@ const log_notification = async (channel, doc_type, doc_id, recipient, status, er
 // Safe "from" address — always valid
 const from_address = () => {
   const user = process.env.EMAIL_HOST_USER || '';
-  const name = process.env.FIRM_NAME || 'Interior Firm';
+  const name = process.env.FIRM_NAME || 'The Design Space';
   return `"${name}" <${user}>`;
 };
 
@@ -87,7 +87,7 @@ exports.send_invoice_email = async (invoice) => {
           </table>
           <p style="color:#666;font-size:13px;">Please make payment before the due date. If you have any questions, feel free to contact us.</p>
           <hr style="border:none;border-top:1px solid #EDE8DF;margin:20px 0;">
-          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'Interior Firm'}</p>
+          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'The Design Space'}</p>
         </div>
       `,
       attachments,
@@ -129,7 +129,7 @@ exports.send_quotation_email = async (quotation) => {
           <p>Please find your quotation attached. Grand Total: <strong style="color:#C8922A;">₹${Number(quotation.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></p>
           <p style="color:#666;font-size:13px;">Kindly review and let us know your approval.</p>
           <hr style="border:none;border-top:1px solid #EDE8DF;margin:20px 0;">
-          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'Interior Firm'}</p>
+          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'The Design Space'}</p>
         </div>
       `,
       attachments,
@@ -163,7 +163,7 @@ exports.send_proposal_email = async (proposal) => {
     await transporter.sendMail({
       from: from_address(),
       to: client.email,
-      subject: `Proposal: ${proposal.title} — ${process.env.FIRM_NAME || 'Interior Firm'}`,
+      subject: `Proposal: ${proposal.title} — ${process.env.FIRM_NAME || 'The Design Space'}`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
           <h2 style="color:#C8922A;">${proposal.title}</h2>
@@ -175,7 +175,7 @@ exports.send_proposal_email = async (proposal) => {
           ${proposal.notes ? `<p style="color:#666;font-size:12px;"><strong>Notes:</strong> ${escape_html_for_email(proposal.notes)}</p>` : ''}
           <p style="color:#666;font-size:13px;">Kindly review and let us know if you have any questions.</p>
           <hr style="border:none;border-top:1px solid #EDE8DF;margin:20px 0;">
-          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'Interior Firm'}</p>
+          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'The Design Space'}</p>
         </div>
       `,
       attachments,
@@ -218,7 +218,7 @@ exports.send_payment_reminder_email = async (invoice) => {
           </table>
           <p style="color:#666;font-size:13px;">Please make payment at your earliest convenience. Contact us if you have any questions.</p>
           <hr style="border:none;border-top:1px solid #EDE8DF;margin:20px 0;">
-          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'Interior Firm'}</p>
+          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'The Design Space'}</p>
         </div>
       `,
     });
@@ -251,7 +251,7 @@ exports.send_portfolio_email = async (portfolio, recipient_email, pdf_buffer) =>
     await transporter.sendMail({
       from: from_address(),
       to: recipient_email,
-      subject: `Portfolio: ${portfolio.title} — ${process.env.FIRM_NAME || 'Interior Firm'}`,
+      subject: `Portfolio: ${portfolio.title} — ${process.env.FIRM_NAME || 'The Design Space'}`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
           <h2 style="color:#C8922A;">${portfolio.title}</h2>
@@ -261,7 +261,7 @@ exports.send_portfolio_email = async (portfolio, recipient_email, pdf_buffer) =>
           ${image_links ? `<div style="margin:16px 0;">${image_links}</div>` : ''}
           <p style="color:#666;font-size:13px;">A complete PDF version is attached for your reference.</p>
           <hr style="border:none;border-top:1px solid #EDE8DF;margin:20px 0;">
-          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'Interior Firm'}</p>
+          <p style="color:#999;font-size:11px;">This is a computer-generated email. | ${process.env.FIRM_NAME || 'The Design Space'}</p>
         </div>
       `,
       attachments: pdf_buffer
