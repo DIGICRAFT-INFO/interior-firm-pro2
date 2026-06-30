@@ -31,9 +31,19 @@ exports.get_proposals = async (req, res) => {
     const proposals = await Proposal.find(matchStage)
       .sort('-created_at')
       .populate({ path: 'project', populate: { path: 'client' } }) // select_related
-      .populate('template'); 
-      
-    res.json(proposals.map(formatProposal));
+      .populate('template');
+
+    // Filter by client if ?client= param provided (proposals don't store client directly,
+    // it's reached via project.client, so this must be done post-query)
+    let filtered = proposals;
+    if (req.query.client) {
+      filtered = proposals.filter(prop =>
+        prop.project && prop.project.client &&
+        String(prop.project.client._id) === String(req.query.client)
+      );
+    }
+
+    res.json(filtered.map(formatProposal));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

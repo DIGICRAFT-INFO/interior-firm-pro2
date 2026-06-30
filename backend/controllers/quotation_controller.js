@@ -67,8 +67,18 @@ exports.get_quotations = async (req, res) => {
       .populate({ path: 'project', populate: { path: 'client' } })
       .populate('items')
       .sort('-created_at'); //
-      
-    res.json(quotations.map(formatQuotation));
+
+    // Filter by client if ?client= param provided (quotations don't store client directly,
+    // it's reached via project.client, so this must be done post-query)
+    let filtered = quotations;
+    if (req.query.client) {
+      filtered = quotations.filter(q =>
+        q.project && q.project.client &&
+        String(q.project.client._id) === String(req.query.client)
+      );
+    }
+
+    res.json(filtered.map(formatQuotation));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
