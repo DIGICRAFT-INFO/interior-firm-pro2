@@ -516,8 +516,8 @@ export default function ClientsPage() {
 
       {/* Modal - Create/Edit */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#1C1C1C]/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[24px] w-full max-w-xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-8 duration-500">
+        <div className="fixed inset-0  z-[100] flex items-center justify-center bg-[#1C1C1C]/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+          <div className="bg-white max-h-[90vh] overflow-y-scroll rounded-[24px] w-full max-w-xl shadow-2xl animate-in slide-in-from-bottom-8 duration-500">
             <div className="flex items-center justify-between px-8 py-6 border-b border-[#EDE8DF] bg-[#FAF8F5]">
               <div>
                 <h2 className="text-xl font-black text-[#1C1C1C]">

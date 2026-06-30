@@ -9,7 +9,7 @@
   });
 
   export const metadata: Metadata = {
-    title: "InteriorBill Pro",
+    title: "The Design Space",
     description: "Proposal, Quotation & Invoicing System for Interior Design Firms",
   };
 

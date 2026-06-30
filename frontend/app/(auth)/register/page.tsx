@@ -47,7 +47,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-md">
         {/* Logo / Header */}
         <div className="text-center mb-10">
-          <img src="/logo.png" alt="InteriorBill" className="mx-auto w-24 h-24 rounded-2xl mb-4 shadow-lg shadow-[#C8922A]/30 object-contain" />
+          <img src="/logo4.png" alt="InteriorBill" className="mx-auto w-24 h-24 rounded-2xl mb-4 shadow-lg shadow-[#C8922A]/30 object-contain" />
           <h1 className="text-2xl font-black text-[#1C1C1C]">
             Create your account
           </h1>

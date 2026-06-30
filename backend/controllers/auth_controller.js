@@ -2,7 +2,7 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 
 const generate_tokens = (id) => {
-  const access = jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+  const access = jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '3h' });
   const refresh = jwt.sign({ id }, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
   return { access, refresh };
 };
@@ -100,7 +100,7 @@ exports.token_refresh = async (req, res) => {
       return res.status(401).json({ detail: 'User inactive, pending approval or not found.' });
     }
 
-    const access = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    const access = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '3h' });
     res.json({ access });
   } catch (err) {
     res.status(401).json({ detail: 'Invalid or expired refresh token.' });

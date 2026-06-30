@@ -16,8 +16,8 @@ function LoginContent() {
   const [revokedMessage, setRevokedMessage] = useState("");
 
   const [formData, setFormData] = useState({
-    email: "interiorfirm@123",
-    password: "interiorfirm@123",
+    email: "thedesignspace@gmail.com",
+    password: "Thedesignspace@2026",
   });
 
   useEffect(() => {

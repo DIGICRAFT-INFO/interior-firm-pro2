@@ -58,6 +58,8 @@ import {
   deleteProject,
   getProjectsByClient,
   createProposalTemplate,
+  updateProposalTemplate,
+  deleteProposalTemplate,
   approveQuotation,
   reviseQuotation,
   sendQuotation, // marks sent
@@ -324,6 +326,7 @@ export default function ClientDetails() {
   const [proposalsLoading, setProposalsLoading] = useState(false);
 
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [templateForm, setTemplateForm] = useState({
     name: "",
     description: "",
@@ -331,6 +334,7 @@ export default function ClientDetails() {
   });
   const [templateSubmitting, setTemplateSubmitting] = useState(false);
   const [templateError, setTemplateError] = useState<any>(null);
+  const [templateActionKey, setTemplateActionKey] = useState<string | null>(null);
 
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
   const [proposalMode, setProposalMode] = useState<"template" | "manual">(
@@ -716,19 +720,61 @@ export default function ClientDetails() {
   /* Template handlers                                                          */
   /* ────────────────────────────────────────────────────────────────────────── */
 
+  const openTemplateModal = () => {
+    setEditingTemplateId(null);
+    setTemplateForm({ name: "", description: "", content: "" });
+    setTemplateError(null);
+    setIsTemplateModalOpen(true);
+  };
+
+  const openEditTemplateModal = (t: any) => {
+    setEditingTemplateId(t.id);
+    setTemplateForm({
+      name: t.name || "",
+      description: t.description || "",
+      content: t.content || "",
+    });
+    setTemplateError(null);
+    setIsTemplateModalOpen(true);
+  };
+
+  const closeTemplateModal = () => {
+    setIsTemplateModalOpen(false);
+    setEditingTemplateId(null);
+    setTemplateForm({ name: "", description: "", content: "" });
+    setTemplateError(null);
+  };
+
   const handleTemplateSubmit = async (e: any) => {
     e.preventDefault();
     setTemplateSubmitting(true);
     setTemplateError(null);
     try {
-      await createProposalTemplate(templateForm);
+      if (editingTemplateId) {
+        await updateProposalTemplate(editingTemplateId, templateForm);
+      } else {
+        await createProposalTemplate(templateForm);
+      }
       await fetchTemplates();
-      setIsTemplateModalOpen(false);
-      setTemplateForm({ name: "", description: "", content: "" });
+      closeTemplateModal();
     } catch (err) {
       setTemplateError(err);
     } finally {
       setTemplateSubmitting(false);
+
+    }
+  };
+
+  const handleDeleteTemplate = async (tid: string) => {
+    if (!confirm("Delete this template permanently?")) return;
+    setTemplateActionKey(tid);
+    try {
+      await deleteProposalTemplate(tid);
+      await fetchTemplates();
+    } catch (e: any) {
+      alert(e?.message || "Delete failed");
+    } finally {
+      setTemplateActionKey(null);
     }
   };
 
@@ -1662,7 +1708,7 @@ const payload = {
             {activeTab === "proposals" && (
               <div className="flex gap-2">
                 <button
-                  onClick={() => setIsTemplateModalOpen(true)}
+                  onClick={openTemplateModal}
                   className="flex items-center gap-2 bg-white border border-[#EDE8DF] hover:border-[#C8922A] text-[#6B6259] hover:text-[#C8922A] text-[12px] font-semibold px-3 py-2 rounded-lg transition-all shadow-sm"
                 >
                   <Layout size={14} /> Template
@@ -1799,7 +1845,7 @@ const payload = {
                         <div className="p-2 bg-[#FDF3E3] rounded-lg text-[#C8922A]">
                           <FileText size={13} />
                         </div>
-                        <div>
+                        <div className="flex-1 min-w-0">
                           <p className="text-[13px] font-bold text-[#1C1C1C]">
                             {t.name}
                           </p>
@@ -1808,6 +1854,27 @@ const payload = {
                               {t.description}
                             </p>
                           )}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <button
+                            onClick={() => openEditTemplateModal(t)}
+                            className="p-1.5 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100"
+                            title="Edit Template"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTemplate(t.id)}
+                            disabled={templateActionKey === t.id}
+                            className="p-1.5 bg-red-50 text-red-600 rounded-md hover:bg-red-100 disabled:opacity-50"
+                            title="Delete Template"
+                          >
+                            {templateActionKey === t.id ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={14} />
+                            )}
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -3483,11 +3550,8 @@ const payload = {
       {/* TEMPLATE MODAL */}
       {isTemplateModalOpen && (
         <Modal
-          title="Create New Template"
-          onClose={() => {
-            setIsTemplateModalOpen(false);
-            setTemplateError(null);
-          }}
+          title={editingTemplateId ? "Edit Template" : "Create New Template"}
+          onClose={closeTemplateModal}
           maxW="max-w-2xl"
         >
           <form
@@ -3545,9 +3609,9 @@ const payload = {
             </FF>
             <div className="pt-4 border-t border-[#F5F2ED]">
               <MFooter
-                onCancel={() => setIsTemplateModalOpen(false)}
+                onCancel={closeTemplateModal}
                 isSubmitting={templateSubmitting}
-                label="Save Template"
+                label={editingTemplateId ? "Update Template" : "Save Template"}
               />
             </div>
           </form>

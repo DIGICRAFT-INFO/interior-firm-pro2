@@ -100,22 +100,45 @@ const proposalStatusConfig: Record<string, { label: string; color: string; bg: s
   rejected: { label: "Rejected", color: "#EF4444", bg: "#FEF2F2" },
 };
 
-// ─── Chart Data (static for performance trend visual) ────────────────────────
+// ─── Chart Data: built from real invoices (no demo/static data) ──────────────
+// Builds a trailing N-month series from actual invoice records so the graph
+// always reflects whatever data currently exists — even if it's just the
+// current month with one or two invoices.
+function buildMonthlyTrend(invoices: any[], monthsBack = 6) {
+  const now = new Date();
+  const buckets: { key: string; month: string; invoiced: number; collected: number }[] = [];
 
-const chartData = [
-  { month: "Jan", invoiced: 20, collected: 15 },
-  { month: "Feb", invoiced: 35, collected: 28 },
-  { month: "Mar", invoiced: 28, collected: 22 },
-  { month: "Apr", invoiced: 48, collected: 38 },
-  { month: "May", invoiced: 42, collected: 35 },
-  { month: "Jun", invoiced: 60, collected: 50 },
-  { month: "Jul", invoiced: 75, collected: 62 },
-  { month: "Aug", invoiced: 85, collected: 70 },
-  { month: "Sep", invoiced: 72, collected: 65 },
-  { month: "Oct", invoiced: 90, collected: 78 },
-  { month: "Nov", invoiced: 82, collected: 74 },
-  { month: "Dec", invoiced: 95, collected: 88 },
-];
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    buckets.push({
+      key: `${d.getFullYear()}-${d.getMonth()}`,
+      month: d.toLocaleDateString("en-IN", { month: "short" }),
+      invoiced: 0,
+      collected: 0,
+    });
+  }
+
+  const bucketMap = new Map(buckets.map((b) => [b.key, b]));
+
+  for (const inv of invoices) {
+    const dateStr = inv.created_at || inv.due_date;
+    if (!dateStr) continue;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) continue;
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const bucket = bucketMap.get(key);
+    if (!bucket) continue; // outside the trailing window
+    bucket.invoiced += Number(inv.grand_total || 0);
+    bucket.collected += Number(inv.amount_paid || 0);
+  }
+
+  // Convert to thousands (₹K) to keep the chart scale readable, matching tooltip labels
+  return buckets.map((b) => ({
+    month: b.month,
+    invoiced: Math.round(b.invoiced / 1000),
+    collected: Math.round(b.collected / 1000),
+  }));
+}
 
 // ─── Helper: currency format ──────────────────────────────────────────────────
 const fmtINR = (n: number) =>
@@ -301,11 +324,11 @@ export default function DashboardPage() {
       const [summaryRes, projectsRes, proposalsRes, quotationsRes, paymentsRes, enquiriesRes, notifRes] =
         await Promise.allSettled([
           fetch(`${API_BASE_URL}/dashboard/summary`, { headers }),
-          fetch(`${API_BASE_URL}/projects`, { headers }),
+          fetch(`${API_BASE_URL}/clients/projects/`, { headers }),
           fetch(`${API_BASE_URL}/proposals`, { headers }),
           fetch(`${API_BASE_URL}/quotations`, { headers }),
           fetch(`${API_BASE_URL}/invoices?limit=20`, { headers }),
-          fetch(`${API_BASE_URL}/enquiry`, { headers }),
+          fetch(`${API_BASE_URL}/enquiries`, { headers }),
           fetch(`${API_BASE_URL}/in-app-notifications?limit=5`, { headers }),
         ]);
 
@@ -384,6 +407,9 @@ export default function DashboardPage() {
   if (!data)   return null;
 
   const { kpis, recent_invoices, projects, proposals, quotations, payments, enquiries, notifications } = data;
+
+  const chartData = buildMonthlyTrend(payments, 6);
+  const hasChartActivity = chartData.some((d) => d.invoiced > 0 || d.collected > 0);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -513,25 +539,31 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="invoicedGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#C8922A" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#C8922A" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="collectedGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10B981" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#9A8F82" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#9A8F82" }} axisLine={false} tickLine={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey="invoiced" stroke="#C8922A" strokeWidth={2.5} fill="url(#invoicedGrad)" dot={false} activeDot={{ r: 5, fill: "#C8922A", stroke: "#fff", strokeWidth: 2 }} />
-              <Area type="monotone" dataKey="collected" stroke="#10B981" strokeWidth={2.5} fill="url(#collectedGrad)" dot={false} activeDot={{ r: 5, fill: "#10B981", stroke: "#fff", strokeWidth: 2 }} />
-            </AreaChart>
-          </ResponsiveContainer>
+          {hasChartActivity ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="invoicedGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#C8922A" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#C8922A" stopOpacity={0} />
+                  </linearGradient>sdf
+                  <linearGradient id="collectedGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#9A8F82" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "#9A8F82" }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area type="monotone" dataKey="invoiced" stroke="#C8922A" strokeWidth={2.5} fill="url(#invoicedGrad)" dot={false} activeDot={{ r: 5, fill: "#C8922A", stroke: "#fff", strokeWidth: 2 }} />
+                <Area type="monotone" dataKey="collected" stroke="#10B981" strokeWidth={2.5} fill="url(#collectedGrad)" dot={false} activeDot={{ r: 5, fill: "#10B981", stroke: "#fff", strokeWidth: 2 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[200px] flex items-center justify-center">
+              <EmptyRow icon={BarChart3} label="No invoices in the last 6 months yet" />
+            </div>
+          )}
         </div>
 
         {/* Notifications Feed */}
