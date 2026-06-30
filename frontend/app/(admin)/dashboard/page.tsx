@@ -388,7 +388,7 @@ export default function DashboardPage() {
           </div>
           <h1 className="text-2xl font-bold text-[#1C1C1C] text-center mb-2">Account Pending Approval</h1>
           <p className="text-[14px] text-[#6B6259] text-center mb-6 leading-relaxed">
-            Hello <span className="font-semibold text-[#1C1C1C]">{userName}</span>, your interior firm portal account has been successfully registered but requires activation from the Manager before you can view financial KPIs and data.
+            Hello <span className="font-semibold text-[#1C1C1C]">{userName}</span>, your The Design Space portal account has been successfully registered but requires activation from the Manager before you can view financial KPIs and data.
           </p>
           <div className="flex items-center justify-center gap-2 px-4 py-3 bg-[#FFFBEB] rounded-xl border border-[#FDE68A] mb-6">
             <Clock size={16} className="text-[#F59E0B] flex-shrink-0" />
