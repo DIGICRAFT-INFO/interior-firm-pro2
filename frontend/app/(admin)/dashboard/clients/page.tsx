@@ -40,6 +40,7 @@ type ClientUI = Client & {
   lead_source_other: string;
   client_type: string;
   country: string;
+  all_projects_completed: boolean;
 };
 const INDIAN_STATES = [
   "Andhra Pradesh",
@@ -94,6 +95,7 @@ function toClientUI(client: Client): ClientUI {
     lead_source_other: client.lead_source_other || "",
     country: client.country || "India",
     client_type: client.client_type || "",
+    all_projects_completed: !!client.all_projects_completed,
   };
 }
 
@@ -442,9 +444,15 @@ export default function ClientsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-5">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#ECFDF5] text-[#10B981] border border-[#D1FAE5]">
-                        Active
-                      </span>
+                      {c.all_projects_completed ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#F3F4F6] text-[#4B5563] border border-[#E5E7EB]">
+                          Completed
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#ECFDF5] text-[#10B981] border border-[#D1FAE5]">
+                          Active
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-5 text-right relative">
                       <button
@@ -516,8 +524,8 @@ export default function ClientsPage() {
 
       {/* Modal - Create/Edit */}
       {isModalOpen && (
-        <div className="fixed inset-0  z-[100] flex items-center justify-center bg-[#1C1C1C]/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-          <div className="bg-white max-h-[90vh] overflow-y-scroll rounded-[24px] w-full max-w-xl shadow-2xl animate-in slide-in-from-bottom-8 duration-500">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#1C1C1C]/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[24px] w-full max-w-xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-8 duration-500">
             <div className="flex items-center justify-between px-8 py-6 border-b border-[#EDE8DF] bg-[#FAF8F5]">
               <div>
                 <h2 className="text-xl font-black text-[#1C1C1C]">

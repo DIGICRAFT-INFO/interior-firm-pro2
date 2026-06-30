@@ -163,7 +163,7 @@ exports.send_proposal_email = async (proposal) => {
     await transporter.sendMail({
       from: from_address(),
       to: client.email,
-      subject: `Proposal: ${proposal.title} — ${process.env.FIRM_NAME || 'The Design Space'}`,
+      subject: `Proposal: ${proposal.title} — The Design Space`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
           <h2 style="color:#C8922A;">${proposal.title}</h2>

@@ -29,7 +29,21 @@ exports.get_clients = async (req, res) => {
           state: 1,
           country: 1,
           created_at: 1,
-          project_count: { $size: '$projects' } // source='projects.count'
+          project_count: { $size: '$projects' }, // source='projects.count'
+          all_projects_completed: {
+            $and: [
+              { $gt: [{ $size: '$projects' }, 0] },
+              {
+                $allElementsTrue: {
+                  $map: {
+                    input: '$projects',
+                    as: 'p',
+                    in: { $eq: ['$$p.status', 'completed'] }
+                  }
+                }
+              }
+            ]
+          }
         }
       },
       { $sort: { full_name: 1, created_at: 1 } } // ordering_fields
