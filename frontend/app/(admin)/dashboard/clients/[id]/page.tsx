@@ -1564,6 +1564,14 @@ const handleProjectEditClick = (proj: any) => {
 
   // ── Copy Modal Handlers ────────────────────────────────────────────────────
   const openCopyModal = async (inv: any) => {
+    // Defense in depth — the Copy button is already hidden for paid/partial
+    // invoices, but guard here too in case this is ever called elsewhere.
+    if (["paid", "partial"].includes(inv.status)) {
+      alert(
+        "This invoice already has payments recorded, so it can't be copied. Please create a new invoice instead.",
+      );
+      return;
+    }
     // Fetch full detail (with items)
     const full = await getInvoiceById(inv.id);
     setCopySourceInvoice(full);
@@ -1653,9 +1661,16 @@ const handleProjectEditClick = (proj: any) => {
   /* ────────────────────────────────────────────────────────────────────────── */
 
   const invoiceStats = useMemo(() => {
+    // Cancelled invoices are the "source" of a Copy & Edit action — they're
+    // superseded by the new copy, so they shouldn't add to Total Invoiced
+    // (otherwise the same bill amount would be counted twice: once for the
+    // original, once for the copy).
+    const activeInvoices = invoices.filter(
+      (i: any) => i.status !== "cancelled",
+    );
     return {
       total: invoices.length,
-      totalValue: invoices.reduce(
+      totalValue: activeInvoices.reduce(
         (s: number, i: any) => s + parseFloat(i.grand_total || 0),
         0,
       ),
@@ -3263,13 +3278,18 @@ const handleProjectEditClick = (proj: any) => {
                                 </button>
 
                                 {/* ── COPY button ── */}
-                                <button
-                                  onClick={() => openCopyModal(inv)}
-                                  title="Copy & Edit Invoice"
-                                  className="p-1.5 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100"
-                                >
-                                  <Copy size={13} />
-                                </button>
+                                {/* Hidden for paid/partial invoices — copying */}
+                                {/* would create a second live invoice for */}
+                                {/* money that's already been collected. */}
+                                {!["paid", "partial"].includes(inv.status) && (
+                                  <button
+                                    onClick={() => openCopyModal(inv)}
+                                    title="Copy & Edit Invoice"
+                                    className="p-1.5 bg-amber-50 text-amber-700 rounded-md hover:bg-amber-100"
+                                  >
+                                    <Copy size={13} />
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>

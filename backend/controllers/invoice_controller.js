@@ -290,6 +290,19 @@ exports.copy_invoice = async (req, res) => {
       .session(session);
     if (!source) return res.status(404).json({ detail: 'Not found.' });
 
+    // ── Block copying an invoice that already has payments ─────────────────
+    // A copy is meant to replace the source outright (it gets auto-
+    // cancelled below). If money has already been collected against it,
+    // cancelling would hide that collected amount from reports, so we
+    // refuse the copy entirely rather than silently doing the wrong thing.
+    if (['paid', 'partial'].includes(source.status) || parseFloat(source.amount_paid || 0) > 0) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        detail: 'This invoice already has payments recorded and cannot be copied. Please create a new invoice instead.',
+      });
+    }
+
     // ── Determine next copy suffix ──────────────────────────────────────────
     // Find all invoices whose number starts with source.invoice_number + '-C'
     const baseNumber = source.invoice_number;
@@ -410,6 +423,22 @@ exports.copy_invoice = async (req, res) => {
       grand_total:    newGrandTotal,
       balance_due:    newGrandTotal,
     }, { session });
+
+    // ── Cancel the source invoice so it stops counting toward totals ────────
+    // A copy is meant to *replace* the source (client asked for changes to
+    // the same bill), not add a second live invoice alongside it. Without
+    // this, both the source and the copy have status other than 'cancelled'
+    // and both get summed into dashboard/client "Total Invoiced" figures,
+    // effectively double-counting the same amount.
+    // Safety: never auto-cancel an invoice that already has payments
+    // recorded against it — that would silently hide real collected money.
+    if (parseFloat(source.amount_paid || 0) === 0 && source.status !== 'cancelled') {
+      await Invoice.findByIdAndUpdate(
+        source._id,
+        { status: 'cancelled', balance_due: 0 },
+        { session },
+      );
+    }
 
     await session.commitTransaction();
     session.endSession();

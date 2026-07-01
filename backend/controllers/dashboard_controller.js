@@ -20,7 +20,13 @@ exports.dashboard_summary = async (req, res) => {
     );
 
     // Aggregations
-    const [total_invoiced_agg] = await Invoice.aggregate([{ $group: { _id: null, t: { $sum: '$grand_total' } } }]);
+    // Exclude cancelled invoices (e.g. the source of a "Copy & Edit") so a
+    // copied invoice isn't counted twice — once as the original, once as
+    // the new copy.
+    const [total_invoiced_agg] = await Invoice.aggregate([
+      { $match: { status: { $ne: 'cancelled' } } },
+      { $group: { _id: null, t: { $sum: '$grand_total' } } },
+    ]);
     const [total_collected_agg] = await PaymentRecord.aggregate([{ $group: { _id: null, t: { $sum: '$amount_paid' } } }]);
     const [outstanding_agg] = await Invoice.aggregate([
       { $match: { status: { $in: ['issued', 'partial', 'overdue'] } } },

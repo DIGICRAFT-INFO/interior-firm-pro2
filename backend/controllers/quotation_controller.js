@@ -420,6 +420,19 @@ exports.copy_quotation = async (req, res) => {
 
     await QuotationItem.insertMany(allItems, { session });
 
+    // ── Supersede the source quotation ───────────────────────────────────────
+    // Mirrors what "Revise" already does for versioned quotations: the old
+    // one should stop being treated as an active quote once a copy replaces
+    // it, otherwise both remain "live" and any totals/reporting that sums
+    // quotations double-count the same underlying deal.
+    if (source.status !== 'superseded') {
+      await Quotation.findByIdAndUpdate(
+        source._id,
+        { status: 'superseded' },
+        { session },
+      );
+    }
+
     await session.commitTransaction();
     session.endSession();
 
