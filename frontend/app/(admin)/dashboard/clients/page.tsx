@@ -39,6 +39,7 @@ type ClientUI = Client & {
   lead_source: string;
   lead_source_other: string;
   client_type: string;
+  client_type_other: string;
   country: string;
   all_projects_completed: boolean;
 };
@@ -95,6 +96,7 @@ function toClientUI(client: Client): ClientUI {
     lead_source_other: client.lead_source_other || "",
     country: client.country || "India",
     client_type: client.client_type || "",
+    client_type_other: (client as any).client_type_other || "",
     all_projects_completed: !!client.all_projects_completed,
   };
 }
@@ -121,6 +123,7 @@ export default function ClientsPage() {
     state: "",
     country: "India",
     client_type: "",
+    client_type_other: "",
   });
 
   const fetchClients = useCallback(async () => {
@@ -157,6 +160,7 @@ export default function ClientsPage() {
       state: "",
       country: "India",
       client_type: "",
+      client_type_other: "",
     });
   };
 
@@ -174,7 +178,8 @@ export default function ClientsPage() {
       city: client.city || "",
       state: client.state || "",
       country: client.country || "India",
-    client_type: client.client_type || "",
+      client_type: client.client_type || "",
+      client_type_other: client.client_type_other || "",
     });
     setIsModalOpen(true);
     setActiveMenu(null);
@@ -288,13 +293,18 @@ export default function ClientsPage() {
             New This Month
           </p>
           <p className="text-2xl font-black mt-1 text-green-600">
-            {clients.filter((c) => {
-              const created = (c as any).created_at;
-              if (!created) return false;
-              const d = new Date(created);
-              const now = new Date();
-              return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-            }).length}
+            {
+              clients.filter((c) => {
+                const created = (c as any).created_at;
+                if (!created) return false;
+                const d = new Date(created);
+                const now = new Date();
+                return (
+                  d.getMonth() === now.getMonth() &&
+                  d.getFullYear() === now.getFullYear()
+                );
+              }).length
+            }
           </p>
         </div>
       </div>
@@ -392,13 +402,35 @@ export default function ClientsPage() {
                             />
                           </p>
                           {c.client_type && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider mt-0.5"
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider mt-0.5"
                               style={{
-                                background: c.client_type === 'vendor' ? '#EEF2FF' : c.client_type === 'local' ? '#FFF7ED' : c.client_type === 'corporate' ? '#F0FDF4' : c.client_type === 'builder' ? '#FDF4FF' : '#F5F5F5',
-                                color: c.client_type === 'vendor' ? '#4F46E5' : c.client_type === 'local' ? '#EA580C' : c.client_type === 'corporate' ? '#16A34A' : c.client_type === 'builder' ? '#9333EA' : '#6B7280',
+                                background:
+                                  c.client_type === "vendor"
+                                    ? "#EEF2FF"
+                                    : c.client_type === "local"
+                                      ? "#FFF7ED"
+                                      : c.client_type === "corporate"
+                                        ? "#F0FDF4"
+                                        : c.client_type === "builder"
+                                          ? "#FDF4FF"
+                                          : "#F5F5F5",
+                                color:
+                                  c.client_type === "vendor"
+                                    ? "#4F46E5"
+                                    : c.client_type === "local"
+                                      ? "#EA580C"
+                                      : c.client_type === "corporate"
+                                        ? "#16A34A"
+                                        : c.client_type === "builder"
+                                          ? "#9333EA"
+                                          : "#6B7280",
                               }}
                             >
-                              {c.client_type}
+                              {c.client_type === "other" &&
+                              c.client_type_other
+                                ? c.client_type_other
+                                : c.client_type}
                             </span>
                           )}
                           <div className="flex items-center gap-1 text-[11px] text-[#9A8F82] mt-0.5">
@@ -419,16 +451,32 @@ export default function ClientsPage() {
                             <Mail size={12} className="text-[#9A8F82]" />
                           </div>
                           {c.email ? (
-                            <a href={`mailto:${c.email}`} onClick={(e) => e.stopPropagation()} className="hover:text-[#C8922A] hover:underline transition-colors">{c.email}</a>
-                          ) : "No email"}
+                            <a
+                              href={`mailto:${c.email}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="hover:text-[#C8922A] hover:underline transition-colors"
+                            >
+                              {c.email}
+                            </a>
+                          ) : (
+                            "No email"
+                          )}
                         </div>
                         <div className="flex items-center gap-2 text-[12px] text-[#6B6259] font-medium">
                           <div className="p-1 bg-[#FAF8F5] rounded">
                             <Phone size={12} className="text-[#9A8F82]" />
                           </div>
                           {c.phone ? (
-                            <a href={`tel:${c.phone}`} onClick={(e) => e.stopPropagation()} className="hover:text-[#C8922A] hover:underline transition-colors">{c.phone}</a>
-                          ) : "No phone"}
+                            <a
+                              href={`tel:${c.phone}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="hover:text-[#C8922A] hover:underline transition-colors"
+                            >
+                              {c.phone}
+                            </a>
+                          ) : (
+                            "No phone"
+                          )}
                         </div>
                       </div>
                     </td>
@@ -620,26 +668,55 @@ export default function ClientsPage() {
                   />
                 </div>
               </div>
+
               {/* Client Type */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-black text-[#6B6259] uppercase tracking-[0.1em]">
-                  Client Type
-                </label>
-                <select
-                  value={formData.client_type}
-                  onChange={(e) =>
-                    setFormData((p) => ({ ...p, client_type: e.target.value }))
-                  }
-                  className="w-full px-4 py-3 bg-[#FAF8F5] border border-[#EDE8DF] rounded-xl text-[14px] font-medium outline-none focus:border-[#C8922A] transition-all"
-                >
-                  <option value="">— Select Type —</option>
-                  <option value="local">Local</option>
-                  <option value="vendor">Vendor</option>
-                  <option value="corporate">Corporate</option>
-                  <option value="builder">Builder</option>
-                  <option value="architect">Architect / Designer</option>
-                  <option value="other">Other</option>
-                </select>
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black text-[#6B6259] uppercase tracking-[0.1em]">
+                    Client Type
+                  </label>
+                  <select
+                    value={formData.client_type}
+                    onChange={(e) =>
+                      setFormData((p) => ({
+                        ...p,
+                        client_type: e.target.value,
+                        // type change karte hi other empty
+                        client_type_other:
+                          e.target.value === "other"
+                            ? p.client_type_other
+                            : "",
+                      }))
+                    }
+                    className="w-full px-4 py-3 bg-[#FAF8F5] border border-[#EDE8DF] rounded-xl text-[14px] font-medium outline-none focus:border-[#C8922A] transition-all"
+                  >
+                    <option value="">— Select Type —</option>
+                    <option value="local">Local</option>
+                    <option value="vendor">Vendor</option>
+                    <option value="corporate">Corporate</option>
+                    <option value="builder">Builder</option>
+                    <option value="architect">Architect / Designer</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black text-[#6B6259] uppercase tracking-[0.1em]">
+                    Client Type (If Other)
+                  </label>
+                  <input
+                    disabled={formData.client_type !== "other"}
+                    value={formData.client_type_other}
+                    onChange={(e) =>
+                      setFormData((p) => ({
+                        ...p,
+                        client_type_other: e.target.value,
+                      }))
+                    }
+                    placeholder="e.g. NGO, Government, Trust..."
+                    className="w-full px-4 py-3 bg-[#FAF8F5] border border-[#EDE8DF] rounded-xl text-[14px] font-medium outline-none focus:border-[#C8922A] transition-all disabled:opacity-50"
+                  />
+                </div>
               </div>
 
               {/* Lead Source */}

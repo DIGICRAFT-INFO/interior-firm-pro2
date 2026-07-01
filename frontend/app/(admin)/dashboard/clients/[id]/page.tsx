@@ -58,8 +58,6 @@ import {
   deleteProject,
   getProjectsByClient,
   createProposalTemplate,
-  updateProposalTemplate,
-  deleteProposalTemplate,
   approveQuotation,
   reviseQuotation,
   sendQuotation, // marks sent
@@ -326,7 +324,6 @@ export default function ClientDetails() {
   const [proposalsLoading, setProposalsLoading] = useState(false);
 
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
-  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [templateForm, setTemplateForm] = useState({
     name: "",
     description: "",
@@ -334,7 +331,6 @@ export default function ClientDetails() {
   });
   const [templateSubmitting, setTemplateSubmitting] = useState(false);
   const [templateError, setTemplateError] = useState<any>(null);
-  const [templateActionKey, setTemplateActionKey] = useState<string | null>(null);
 
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
   const [proposalMode, setProposalMode] = useState<"template" | "manual">(
@@ -382,7 +378,9 @@ export default function ClientDetails() {
   });
 
   const [quoteItems, setQuoteItems] = useState<any[]>([EMPTY_ITEM()]);
-  const [taxMode, setTaxMode] = useState<"cgst_sgst" | "igst" | "non_gst">("cgst_sgst");
+  const [taxMode, setTaxMode] = useState<"cgst_sgst" | "igst" | "non_gst">(
+    "cgst_sgst",
+  );
   const [masterServices, setMasterServices] = useState<any[]>([]);
 
   const [viewingQuote, setViewingQuote] = useState<any>(null);
@@ -390,7 +388,9 @@ export default function ClientDetails() {
   const [quoteActionKey, setQuoteActionKey] = useState<string | null>(null);
 
   // Edit-history / compare panel (right side of the quotation modal)
-  const [quoteHistoryEntries, setQuoteHistoryEntries] = useState<QuotationHistoryEntry[]>([]);
+  const [quoteHistoryEntries, setQuoteHistoryEntries] = useState<
+    QuotationHistoryEntry[]
+  >([]);
   const [quoteHistoryLoading, setQuoteHistoryLoading] = useState(false);
   const [showQuoteHistory, setShowQuoteHistory] = useState(false);
 
@@ -401,7 +401,14 @@ export default function ClientDetails() {
   const [quoteCopyForm, setQuoteCopyForm] = useState<{
     valid_until: string;
     notes: string;
-    items: Array<{ _key: string; description: string; category: string; quantity: string; unit: string; rate: string }>;
+    items: Array<{
+      _key: string;
+      description: string;
+      category: string;
+      quantity: string;
+      unit: string;
+      rate: string;
+    }>;
   }>({ valid_until: "", notes: "", items: [] });
 
   // ── Invoices ───────────────────────────────────────────────────────────────
@@ -435,7 +442,14 @@ export default function ClientDetails() {
     invoice_date: string;
     due_date: string;
     notes: string;
-    items: Array<{ _key: string; description: string; category: string; quantity: string; unit: string; rate: string }>;
+    items: Array<{
+      _key: string;
+      description: string;
+      category: string;
+      quantity: string;
+      unit: string;
+      rate: string;
+    }>;
   }>({
     invoice_type: "full",
     invoice_date: "",
@@ -453,7 +467,14 @@ export default function ClientDetails() {
     invoice_date: string;
     due_date: string;
     notes: string;
-    items: Array<{ _key: string; description: string; category: string; quantity: string; unit: string; rate: string }>;
+    items: Array<{
+      _key: string;
+      description: string;
+      category: string;
+      quantity: string;
+      unit: string;
+      rate: string;
+    }>;
   }>({
     invoice_type: "full",
     invoice_date: "",
@@ -541,7 +562,7 @@ export default function ClientDetails() {
       const data = await getInvoicesByClient(clientId as string);
       // Deep-clone each object so React sees new references and re-renders every row
       setInvoices(data.map((inv: any) => ({ ...inv })));
-      setInvoicesRefreshKey(k => k + 1); // bump key so every row remounts
+      setInvoicesRefreshKey((k) => k + 1); // bump key so every row remounts
     } catch (e) {
       console.error("Invoices fetch failed:", e);
     } finally {
@@ -644,21 +665,26 @@ export default function ClientDetails() {
     setProjectApiError(null);
   };
 
-  const handleProjectEditClick = (proj: any) => {
-    setEditingProjectId(proj.id);
-    setProjectForm({
-      name: proj.name,
-      property_type: proj.property_type,
-      style_category: proj.style_category || "modern",
-      area_sqft: proj.area_sqft ?? "",
-      budget_range: proj.budget_range ?? "",
-      start_date: proj.start_date ?? "",
-      expected_end_date: proj.expected_end_date ?? "",
-      status: proj.status,
-      notes: proj.notes || "",
-    });
-    setIsProjectModalOpen(true);
-  };
+const handleProjectEditClick = (proj: any) => {
+  setEditingProjectId(proj.id);
+  setProjectForm({
+    name: proj.name,
+    property_type: proj.property_type,
+    style_category: proj.style_category || "modern",
+    area_sqft: proj.area_sqft ?? "",
+    budget_range: proj.budget_range ?? "",
+    // Backend often returns full ISO datetime (e.g. "2024-01-15T00:00:00Z"),
+    // but <input type="date"> only accepts "YYYY-MM-DD" — anything else
+    // silently renders as blank. Normalize before populating the form.
+    start_date: proj.start_date ? String(proj.start_date).split("T")[0] : "",
+    expected_end_date: proj.expected_end_date
+      ? String(proj.expected_end_date).split("T")[0]
+      : "",
+    status: proj.status,
+    notes: proj.notes || "",
+  });
+  setIsProjectModalOpen(true);
+};
 
   const handleDeleteProject = async (pid: string) => {
     if (!confirm("Delete this project?")) return;
@@ -720,61 +746,19 @@ export default function ClientDetails() {
   /* Template handlers                                                          */
   /* ────────────────────────────────────────────────────────────────────────── */
 
-  const openTemplateModal = () => {
-    setEditingTemplateId(null);
-    setTemplateForm({ name: "", description: "", content: "" });
-    setTemplateError(null);
-    setIsTemplateModalOpen(true);
-  };
-
-  const openEditTemplateModal = (t: any) => {
-    setEditingTemplateId(t.id);
-    setTemplateForm({
-      name: t.name || "",
-      description: t.description || "",
-      content: t.content || "",
-    });
-    setTemplateError(null);
-    setIsTemplateModalOpen(true);
-  };
-
-  const closeTemplateModal = () => {
-    setIsTemplateModalOpen(false);
-    setEditingTemplateId(null);
-    setTemplateForm({ name: "", description: "", content: "" });
-    setTemplateError(null);
-  };
-
   const handleTemplateSubmit = async (e: any) => {
     e.preventDefault();
     setTemplateSubmitting(true);
     setTemplateError(null);
     try {
-      if (editingTemplateId) {
-        await updateProposalTemplate(editingTemplateId, templateForm);
-      } else {
-        await createProposalTemplate(templateForm);
-      }
+      await createProposalTemplate(templateForm);
       await fetchTemplates();
-      closeTemplateModal();
+      setIsTemplateModalOpen(false);
+      setTemplateForm({ name: "", description: "", content: "" });
     } catch (err) {
       setTemplateError(err);
     } finally {
       setTemplateSubmitting(false);
-
-    }
-  };
-
-  const handleDeleteTemplate = async (tid: string) => {
-    if (!confirm("Delete this template permanently?")) return;
-    setTemplateActionKey(tid);
-    try {
-      await deleteProposalTemplate(tid);
-      await fetchTemplates();
-    } catch (e: any) {
-      alert(e?.message || "Delete failed");
-    } finally {
-      setTemplateActionKey(null);
     }
   };
 
@@ -890,7 +874,7 @@ export default function ClientDetails() {
       });
       if (res.ok) {
         const data = await res.json();
-        setMasterServices(Array.isArray(data) ? data : data.results ?? []);
+        setMasterServices(Array.isArray(data) ? data : (data.results ?? []));
       }
     } catch (e) {
       console.error("Master services fetch failed:", e);
@@ -945,7 +929,15 @@ export default function ClientDetails() {
       notes: q.notes || "",
     });
 
-    setTaxMode(parseFloat(q.igst_rate || "0") > 0 ? "igst" : (parseFloat(q.cgst_rate || "0") === 0 && parseFloat(q.sgst_rate || "0") === 0 && parseFloat(q.igst_rate || "0") === 0) ? "non_gst" : "cgst_sgst");
+    setTaxMode(
+      parseFloat(q.igst_rate || "0") > 0
+        ? "igst"
+        : parseFloat(q.cgst_rate || "0") === 0 &&
+            parseFloat(q.sgst_rate || "0") === 0 &&
+            parseFloat(q.igst_rate || "0") === 0
+          ? "non_gst"
+          : "cgst_sgst",
+    );
 
     setQuoteItems(
       (q.items || []).map((it: any) => ({
@@ -1023,42 +1015,162 @@ export default function ClientDetails() {
     };
   }, [quoteItems, quoteForm, taxMode]);
 
+  // Totals preview for the "Copy Quotation" modal — mirrors the source
+  // quotation's discount type/value and CGST/SGST/IGST rates so the preview
+  // shown to the user matches what will actually be saved (not just a raw
+  // sum of qty × rate labelled "Grand Total").
+  const quoteCopyTotals = useMemo(() => {
+    const subtotal = quoteCopyForm.items.reduce(
+      (s, it) =>
+        s + (parseFloat(it.quantity) || 0) * (parseFloat(it.rate) || 0),
+      0,
+    );
+
+    const discountType = copySourceQuote?.discount_type || "percentage";
+    const discountValue = parseFloat(copySourceQuote?.discount_value) || 0;
+    const discAmt =
+      discountType === "percentage"
+        ? (subtotal * discountValue) / 100
+        : discountValue;
+    const taxable = Math.max(0, subtotal - discAmt);
+
+    const cgstRate = parseFloat(copySourceQuote?.cgst_rate) || 0;
+    const sgstRate = parseFloat(copySourceQuote?.sgst_rate) || 0;
+    const igstRate = parseFloat(copySourceQuote?.igst_rate) || 0;
+
+    const cgst = (taxable * cgstRate) / 100;
+    const sgst = (taxable * sgstRate) / 100;
+    const igst = (taxable * igstRate) / 100;
+
+    return {
+      subtotal,
+      discountType,
+      discountValue,
+      discAmt,
+      taxable,
+      cgstRate,
+      sgstRate,
+      igstRate,
+      cgst,
+      sgst,
+      igst,
+      total: taxable + cgst + sgst + igst,
+    };
+  }, [quoteCopyForm.items, copySourceQuote]);
+
+  // Totals preview for the "Copy Invoice" modal — mirrors the source
+  // invoice's CGST/SGST/IGST rates so the preview shown to the user matches
+  // what will actually be saved. Invoices carry no discount of their own —
+  // the backend's copy-invoice logic always computes tax straight off the
+  // subtotal (taxable_amount === subtotal, discount is always ₹0) — so we
+  // surface that explicitly rather than omitting the rows.
+  //
+  // NOTE: the invoice-detail API (getInvoiceById, used to load the source
+  // invoice here) does not return cgst_rate/sgst_rate/igst_rate — those are
+  // only attached by the update endpoint. So we derive the effective rate
+  // from the source invoice's stored amounts (amount ÷ subtotal × 100)
+  // whenever an explicit rate isn't present, instead of silently falling
+  // back to 0 and hiding the tax rows.
+  const copyInvoiceTotals = useMemo(() => {
+    const subtotal = copyForm.items.reduce(
+      (s, it) =>
+        s + (parseFloat(it.quantity) || 0) * (parseFloat(it.rate) || 0),
+      0,
+    );
+
+    const discAmt = 0;
+    const taxable = subtotal;
+
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const srcSubtotal = parseFloat(copySourceInvoice?.subtotal) || 0;
+    const deriveRate = (explicitRate: any, amount: any) => {
+      if (
+        explicitRate !== undefined &&
+        explicitRate !== null &&
+        explicitRate !== ""
+      ) {
+        const r = parseFloat(explicitRate);
+        if (!isNaN(r)) return r;
+      }
+      const amt = parseFloat(amount) || 0;
+      return srcSubtotal > 0 ? round2((amt / srcSubtotal) * 100) : 0;
+    };
+
+    const cgstRate = deriveRate(
+      copySourceInvoice?.cgst_rate,
+      copySourceInvoice?.cgst_amount,
+    );
+    const sgstRate = deriveRate(
+      copySourceInvoice?.sgst_rate,
+      copySourceInvoice?.sgst_amount,
+    );
+    const igstRate = deriveRate(
+      copySourceInvoice?.igst_rate,
+      copySourceInvoice?.igst_amount,
+    );
+
+    const cgst = (taxable * cgstRate) / 100;
+    const sgst = (taxable * sgstRate) / 100;
+    const igst = (taxable * igstRate) / 100;
+
+    return {
+      subtotal,
+      discAmt,
+      taxable,
+      cgstRate,
+      sgstRate,
+      igstRate,
+      cgst,
+      sgst,
+      igst,
+      total: taxable + cgst + sgst + igst,
+    };
+  }, [copyForm.items, copySourceInvoice]);
+
   const handleQuoteSubmit = async (e: any) => {
     e.preventDefault();
     if (!quoteForm.project) {
-      setQuoteError({ error: "Please select a project before saving the quotation." });
+      setQuoteError({
+        error: "Please select a project before saving the quotation.",
+      });
       return;
     }
-    const validItems = quoteItems.filter((i) => i.description?.trim() && parseFloat(i.rate) > 0);
+    const validItems = quoteItems.filter(
+      (i) => i.description?.trim() && parseFloat(i.rate) > 0,
+    );
     if (validItems.length === 0) {
-      setQuoteError({ error: "Please add at least one item with a description and rate." });
+      setQuoteError({
+        error: "Please add at least one item with a description and rate.",
+      });
       return;
     }
     setQuoteSubmitting(true);
     setQuoteError(null);
 
-// Inside handleQuoteSubmit
-// Ensure this conversion is robust
-const payload = {
-  project: quoteForm.project,
-  valid_until: quoteForm.valid_until || undefined,
-  discount_type: quoteForm.discount_type,
-  discount_value: parseFloat(quoteForm.discount_value) || 0,
-  cgst_rate: taxMode === "cgst_sgst" ? parseFloat(quoteForm.cgst_rate) || 0 : 0,
-  sgst_rate: taxMode === "cgst_sgst" ? parseFloat(quoteForm.sgst_rate) || 0 : 0,
-  igst_rate: taxMode === "igst" ? parseFloat(quoteForm.igst_rate) || 0 : 0,
-  notes: quoteForm.notes,
-  items: quoteItems
-    .filter((i) => i.description?.trim() && parseFloat(i.rate) > 0)
-    .map((i, n) => ({
-      description: i.description.trim(),
-      category: i.category || "",
-      quantity: parseFloat(i.quantity) || 1,
-      unit: i.unit || "",
-      rate: parseFloat(i.rate),
-      sort_order: n + 1,
-    })),
-};
+    // Inside handleQuoteSubmit
+    // Ensure this conversion is robust
+    const payload = {
+      project: quoteForm.project,
+      valid_until: quoteForm.valid_until || undefined,
+      discount_type: quoteForm.discount_type,
+      discount_value: parseFloat(quoteForm.discount_value) || 0,
+      cgst_rate:
+        taxMode === "cgst_sgst" ? parseFloat(quoteForm.cgst_rate) || 0 : 0,
+      sgst_rate:
+        taxMode === "cgst_sgst" ? parseFloat(quoteForm.sgst_rate) || 0 : 0,
+      igst_rate: taxMode === "igst" ? parseFloat(quoteForm.igst_rate) || 0 : 0,
+      notes: quoteForm.notes,
+      items: quoteItems
+        .filter((i) => i.description?.trim() && parseFloat(i.rate) > 0)
+        .map((i, n) => ({
+          description: i.description.trim(),
+          category: i.category || "",
+          quantity: parseFloat(i.quantity) || 1,
+          unit: i.unit || "",
+          rate: parseFloat(i.rate),
+          sort_order: n + 1,
+        })),
+    };
 
     try {
       if (editingQuoteId) await updateQuotation(editingQuoteId, payload);
@@ -1154,23 +1266,35 @@ const payload = {
   };
 
   const updateQuoteCopyItem = (key: string, field: string, value: string) => {
-    setQuoteCopyForm(prev => ({
+    setQuoteCopyForm((prev) => ({
       ...prev,
-      items: prev.items.map(it => it._key === key ? { ...it, [field]: value } : it),
+      items: prev.items.map((it) =>
+        it._key === key ? { ...it, [field]: value } : it,
+      ),
     }));
   };
 
   const addQuoteCopyItem = () => {
-    setQuoteCopyForm(prev => ({
+    setQuoteCopyForm((prev) => ({
       ...prev,
-      items: [...prev.items, { _key: `new_${Date.now()}`, description: "", category: "", quantity: "1", unit: "", rate: "0" }],
+      items: [
+        ...prev.items,
+        {
+          _key: `new_${Date.now()}`,
+          description: "",
+          category: "",
+          quantity: "1",
+          unit: "",
+          rate: "0",
+        },
+      ],
     }));
   };
 
   const removeQuoteCopyItem = (key: string) => {
-    setQuoteCopyForm(prev => ({
+    setQuoteCopyForm((prev) => ({
       ...prev,
-      items: prev.items.filter(it => it._key !== key),
+      items: prev.items.filter((it) => it._key !== key),
     }));
   };
 
@@ -1181,7 +1305,7 @@ const payload = {
       await copyQuotation(copySourceQuote.id, {
         valid_until: quoteCopyForm.valid_until || undefined,
         notes: quoteCopyForm.notes,
-        items: quoteCopyForm.items.map(it => ({
+        items: quoteCopyForm.items.map((it) => ({
           description: it.description,
           category: it.category,
           quantity: it.quantity,
@@ -1359,19 +1483,19 @@ const payload = {
   };
 
   const openInvoiceEdit = async (iid: string) => {
-    const inv = await getInvoiceById(iid) as any;
+    const inv = (await getInvoiceById(iid)) as any;
     setInvoiceEditForm({
       invoice_type: inv.invoice_type || "full",
       invoice_date: inv.invoice_date ? inv.invoice_date.split("T")[0] : "",
-      due_date:     inv.due_date     ? inv.due_date.split("T")[0]     : "",
-      notes:        inv.notes        || "",
+      due_date: inv.due_date ? inv.due_date.split("T")[0] : "",
+      notes: inv.notes || "",
       items: (inv.items || []).map((it: any, i: number) => ({
-        _key:        `edit_${i}_${Date.now()}`,
+        _key: `edit_${i}_${Date.now()}`,
         description: it.description || "",
-        category:    it.category    || "",
-        quantity:    String(it.quantity || "1"),
-        unit:        it.unit        || "",
-        rate:        String(it.rate || "0"),
+        category: it.category || "",
+        quantity: String(it.quantity || "1"),
+        unit: it.unit || "",
+        rate: String(it.rate || "0"),
       })),
     });
     setIsInvoiceEditOpen(true);
@@ -1380,14 +1504,26 @@ const payload = {
   const updateEditItem = (key: string, field: string, value: string) => {
     setInvoiceEditForm((prev) => ({
       ...prev,
-      items: prev.items.map((it) => it._key === key ? { ...it, [field]: value } : it),
+      items: prev.items.map((it) =>
+        it._key === key ? { ...it, [field]: value } : it,
+      ),
     }));
   };
 
   const addEditItem = () => {
     setInvoiceEditForm((prev) => ({
       ...prev,
-      items: [...prev.items, { _key: `new_${Date.now()}`, description: "", category: "", quantity: "1", unit: "", rate: "0" }],
+      items: [
+        ...prev.items,
+        {
+          _key: `new_${Date.now()}`,
+          description: "",
+          category: "",
+          quantity: "1",
+          unit: "",
+          rate: "0",
+        },
+      ],
     }));
   };
 
@@ -1406,14 +1542,14 @@ const payload = {
       await updateInvoice(viewingInvoice.id, {
         invoice_type: invoiceEditForm.invoice_type,
         invoice_date: invoiceEditForm.invoice_date,
-        due_date:     invoiceEditForm.due_date,
-        notes:        invoiceEditForm.notes,
+        due_date: invoiceEditForm.due_date,
+        notes: invoiceEditForm.notes,
         items: invoiceEditForm.items.map((it) => ({
           description: it.description,
-          category:    it.category,
-          quantity:    it.quantity,
-          unit:        it.unit,
-          rate:        it.rate,
+          category: it.category,
+          quantity: it.quantity,
+          unit: it.unit,
+          rate: it.rate,
         })),
       } as any);
       await fetchInvoices();
@@ -1455,7 +1591,7 @@ const payload = {
     setCopyForm((prev) => ({
       ...prev,
       items: prev.items.map((it) =>
-        it._key === key ? { ...it, [field]: value } : it
+        it._key === key ? { ...it, [field]: value } : it,
       ),
     }));
   };
@@ -1465,7 +1601,14 @@ const payload = {
       ...prev,
       items: [
         ...prev.items,
-        { _key: `new_${Date.now()}`, description: "", category: "", quantity: "1", unit: "", rate: "0" },
+        {
+          _key: `new_${Date.now()}`,
+          description: "",
+          category: "",
+          quantity: "1",
+          unit: "",
+          rate: "0",
+        },
       ],
     }));
   };
@@ -1571,7 +1714,7 @@ const payload = {
               {/* <span className="text-[11px] font-bold px-2 py-0.5 mt-2 rounded-full uppercase bg-green-50 text-green-600 border border-green-100">
                 Active Client
               </span> */}
-            </div>  
+            </div>
 
             <div className="pt-6 space-y-5">
               {[
@@ -1630,10 +1773,22 @@ const payload = {
                       className={`text-[13px] font-medium text-[#1C1C1C] break-words leading-relaxed ${upper ? "uppercase" : ""}`}
                     >
                       {label === "Email Address" && value !== "N/A" ? (
-                        <a href={`mailto:${value}`} className="hover:text-[#C8922A] hover:underline transition-colors">{value}</a>
+                        <a
+                          href={`mailto:${value}`}
+                          className="hover:text-[#C8922A] hover:underline transition-colors"
+                        >
+                          {value}
+                        </a>
                       ) : label === "Phone Number" && value !== "N/A" ? (
-                        <a href={`tel:${value}`} className="hover:text-[#C8922A] hover:underline transition-colors">{value}</a>
-                      ) : value}
+                        <a
+                          href={`tel:${value}`}
+                          className="hover:text-[#C8922A] hover:underline transition-colors"
+                        >
+                          {value}
+                        </a>
+                      ) : (
+                        value
+                      )}
                     </p>
                   </div>
                 </div>
@@ -1708,7 +1863,7 @@ const payload = {
             {activeTab === "proposals" && (
               <div className="flex gap-2">
                 <button
-                  onClick={openTemplateModal}
+                  onClick={() => setIsTemplateModalOpen(true)}
                   className="flex items-center gap-2 bg-white border border-[#EDE8DF] hover:border-[#C8922A] text-[#6B6259] hover:text-[#C8922A] text-[12px] font-semibold px-3 py-2 rounded-lg transition-all shadow-sm"
                 >
                   <Layout size={14} /> Template
@@ -1845,7 +2000,7 @@ const payload = {
                         <div className="p-2 bg-[#FDF3E3] rounded-lg text-[#C8922A]">
                           <FileText size={13} />
                         </div>
-                        <div className="flex-1 min-w-0">
+                        <div>
                           <p className="text-[13px] font-bold text-[#1C1C1C]">
                             {t.name}
                           </p>
@@ -1854,27 +2009,6 @@ const payload = {
                               {t.description}
                             </p>
                           )}
-                        </div>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <button
-                            onClick={() => openEditTemplateModal(t)}
-                            className="p-1.5 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100"
-                            title="Edit Template"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteTemplate(t.id)}
-                            disabled={templateActionKey === t.id}
-                            className="p-1.5 bg-red-50 text-red-600 rounded-md hover:bg-red-100 disabled:opacity-50"
-                            title="Delete Template"
-                          >
-                            {templateActionKey === t.id ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <Trash2 size={14} />
-                            )}
-                          </button>
                         </div>
                       </div>
                     ))}
@@ -2382,9 +2516,10 @@ const payload = {
                             <td className="px-4 sm:px-5 py-4 text-[11px] text-[#6B6259]">
                               {parseFloat(q.igst_rate) > 0
                                 ? `IGST ${q.igst_rate}%`
-                                : parseFloat(q.cgst_rate) > 0 || parseFloat(q.sgst_rate) > 0
-                                ? `CGST ${q.cgst_rate}% + SGST ${q.sgst_rate}%`
-                                : `Non-GST`}
+                                : parseFloat(q.cgst_rate) > 0 ||
+                                    parseFloat(q.sgst_rate) > 0
+                                  ? `CGST ${q.cgst_rate}% + SGST ${q.sgst_rate}%`
+                                  : `Non-GST`}
                             </td>
 
                             <td className="px-4 sm:px-5 py-4 text-right">
@@ -3550,8 +3685,11 @@ const payload = {
       {/* TEMPLATE MODAL */}
       {isTemplateModalOpen && (
         <Modal
-          title={editingTemplateId ? "Edit Template" : "Create New Template"}
-          onClose={closeTemplateModal}
+          title="Create New Template"
+          onClose={() => {
+            setIsTemplateModalOpen(false);
+            setTemplateError(null);
+          }}
           maxW="max-w-2xl"
         >
           <form
@@ -3609,9 +3747,9 @@ const payload = {
             </FF>
             <div className="pt-4 border-t border-[#F5F2ED]">
               <MFooter
-                onCancel={closeTemplateModal}
+                onCancel={() => setIsTemplateModalOpen(false)}
                 isSubmitting={templateSubmitting}
-                label={editingTemplateId ? "Update Template" : "Save Template"}
+                label="Save Template"
               />
             </div>
           </form>
@@ -3768,13 +3906,22 @@ const payload = {
                 onClick={() => setShowQuoteHistory((v) => !v)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-colors ${showQuoteHistory ? "bg-[#FDF3E3] text-[#C8922A]" : "text-[#9A8F82] hover:bg-[#F5F2ED]"}`}
               >
-                <History size={14} /> History {showQuoteHistory ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                <History size={14} /> History{" "}
+                {showQuoteHistory ? (
+                  <ChevronUp size={12} />
+                ) : (
+                  <ChevronDown size={12} />
+                )}
               </button>
             )
           }
           side={
-            editingQuoteId && showQuoteHistory && (
-              <QuoteHistoryPanel entries={quoteHistoryEntries} loading={quoteHistoryLoading} />
+            editingQuoteId &&
+            showQuoteHistory && (
+              <QuoteHistoryPanel
+                entries={quoteHistoryEntries}
+                loading={quoteHistoryLoading}
+              />
             )
           }
         >
@@ -3798,7 +3945,9 @@ const payload = {
                 >
                   <option value="">— Select Project —</option>
                   {projects.length === 0 && (
-                    <option disabled value="">No projects found — create a project first</option>
+                    <option disabled value="">
+                      No projects found — create a project first
+                    </option>
                   )}
                   {projects.map((pr: any) => (
                     <option key={pr.id} value={pr.id}>
@@ -4010,9 +4159,38 @@ const payload = {
                             value=""
                             onChange={(e) => {
                               if (!e.target.value) return;
-                              const svc = masterServices.find(s => s.id === e.target.value);
-                              if (svc) {
-                                updateItem(item._key, "description", svc.name);
+                              const svc = masterServices.find(
+                                (s) => s.id === e.target.value,
+                              );
+                              if (!svc) return;
+
+                              const name =
+                                svc.name || svc.service_name || svc.title || "";
+                              const desc =
+                                svc.description ||
+                                svc.service_description ||
+                                "";
+
+                              // Name + description combined in the item description field
+                              updateItem(
+                                item._key,
+                                "description",
+                                desc ? `${name} - ${desc}` : name,
+                              );
+
+                              // Bonus: auto-fill category/rate/unit if the master service defines them
+                              if (svc.category)
+                                updateItem(item._key, "category", svc.category);
+                              if (svc.unit)
+                                updateItem(item._key, "unit", svc.unit);
+                              if (svc.rate ?? svc.default_rate ?? svc.price) {
+                                updateItem(
+                                  item._key,
+                                  "rate",
+                                  String(
+                                    svc.rate ?? svc.default_rate ?? svc.price,
+                                  ),
+                                );
                               }
                             }}
                             className={`${inputCls} text-[11px] py-1 mb-1 text-[#9A8F82]`}
@@ -4020,7 +4198,7 @@ const payload = {
                             <option value="">— Select from Services —</option>
                             {masterServices.map((svc: any) => (
                               <option key={svc.id} value={svc.id}>
-                                {svc.name}
+                                {svc.name || svc.service_name}
                               </option>
                             ))}
                           </select>
@@ -4382,13 +4560,25 @@ const payload = {
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#EDE8DF] bg-[#FAF8F5] rounded-t-2xl">
               <div>
-                <h2 className="text-[15px] font-bold text-[#1C1C1C]">Copy Quotation</h2>
+                <h2 className="text-[15px] font-bold text-[#1C1C1C]">
+                  Copy Quotation
+                </h2>
                 <p className="text-[11px] text-[#9A8F82] mt-0.5">
-                  Source: <span className="font-semibold text-[#C8922A]">{copySourceQuote.quote_number}</span>
-                  {" "}→ will create <span className="font-semibold text-[#C8922A]">{copySourceQuote.quote_number}-C1</span> (or next suffix)
+                  Source:{" "}
+                  <span className="font-semibold text-[#C8922A]">
+                    {copySourceQuote.quote_number}
+                  </span>{" "}
+                  → will create{" "}
+                  <span className="font-semibold text-[#C8922A]">
+                    {copySourceQuote.quote_number}-C1
+                  </span>{" "}
+                  (or next suffix)
                 </p>
               </div>
-              <button onClick={() => setIsQuoteCopyModalOpen(false)} className="text-[#9A8F82] hover:text-red-500">
+              <button
+                onClick={() => setIsQuoteCopyModalOpen(false)}
+                className="text-[#9A8F82] hover:text-red-500"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -4398,17 +4588,26 @@ const payload = {
               {/* Meta fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Project</label>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">
+                    Project
+                  </label>
                   <div className="px-3 py-2 bg-[#FAF8F5] border border-[#EDE8DF] rounded-lg text-[13px] text-[#6B6259]">
                     {copySourceQuote.project_name || "—"}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Valid Until</label>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">
+                    Valid Until
+                  </label>
                   <input
                     type="date"
                     value={quoteCopyForm.valid_until}
-                    onChange={(e) => setQuoteCopyForm(p => ({ ...p, valid_until: e.target.value }))}
+                    onChange={(e) =>
+                      setQuoteCopyForm((p) => ({
+                        ...p,
+                        valid_until: e.target.value,
+                      }))
+                    }
                     className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A]"
                   />
                 </div>
@@ -4416,11 +4615,15 @@ const payload = {
 
               {/* Notes */}
               <div>
-                <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Notes</label>
+                <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">
+                  Notes
+                </label>
                 <textarea
                   rows={2}
                   value={quoteCopyForm.notes}
-                  onChange={(e) => setQuoteCopyForm(p => ({ ...p, notes: e.target.value }))}
+                  onChange={(e) =>
+                    setQuoteCopyForm((p) => ({ ...p, notes: e.target.value }))
+                  }
                   className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A] resize-none"
                   placeholder="Terms, remarks..."
                 />
@@ -4429,7 +4632,9 @@ const payload = {
               {/* Line items */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider">Line Items</label>
+                  <label className="text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider">
+                    Line Items
+                  </label>
                   <button
                     onClick={addQuoteCopyItem}
                     className="flex items-center gap-1 text-[11px] font-semibold text-[#C8922A] hover:underline"
@@ -4442,8 +4647,19 @@ const payload = {
                   <table className="w-full min-w-[700px] text-[12px]">
                     <thead className="bg-[#FAF8F5]">
                       <tr>
-                        {["Description", "Category", "Qty", "Unit", "Rate (₹)", "Amount (₹)", ""].map((h) => (
-                          <th key={h} className="px-3 py-2 text-left text-[10px] font-bold text-[#9A8F82] uppercase tracking-wider whitespace-nowrap">
+                        {[
+                          "Description",
+                          "Category",
+                          "Qty",
+                          "Unit",
+                          "Rate (₹)",
+                          "Amount (₹)",
+                          "",
+                        ].map((h) => (
+                          <th
+                            key={h}
+                            className="px-3 py-2 text-left text-[10px] font-bold text-[#9A8F82] uppercase tracking-wider whitespace-nowrap"
+                          >
                             {h}
                           </th>
                         ))}
@@ -4451,13 +4667,21 @@ const payload = {
                     </thead>
                     <tbody className="divide-y divide-[#F5F2ED]">
                       {quoteCopyForm.items.map((item) => {
-                        const amt = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
+                        const amt =
+                          (parseFloat(item.quantity) || 0) *
+                          (parseFloat(item.rate) || 0);
                         return (
                           <tr key={item._key}>
                             <td className="px-2 py-1.5">
                               <input
                                 value={item.description}
-                                onChange={(e) => updateQuoteCopyItem(item._key, "description", e.target.value)}
+                                onChange={(e) =>
+                                  updateQuoteCopyItem(
+                                    item._key,
+                                    "description",
+                                    e.target.value,
+                                  )
+                                }
                                 placeholder="e.g. Interior Design"
                                 className="w-full min-w-[140px] px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
@@ -4465,7 +4689,13 @@ const payload = {
                             <td className="px-2 py-1.5">
                               <input
                                 value={item.category}
-                                onChange={(e) => updateQuoteCopyItem(item._key, "category", e.target.value)}
+                                onChange={(e) =>
+                                  updateQuoteCopyItem(
+                                    item._key,
+                                    "category",
+                                    e.target.value,
+                                  )
+                                }
                                 placeholder="Furniture"
                                 className="w-full min-w-[100px] px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
@@ -4474,14 +4704,26 @@ const payload = {
                               <input
                                 type="number"
                                 value={item.quantity}
-                                onChange={(e) => updateQuoteCopyItem(item._key, "quantity", e.target.value)}
+                                onChange={(e) =>
+                                  updateQuoteCopyItem(
+                                    item._key,
+                                    "quantity",
+                                    e.target.value,
+                                  )
+                                }
                                 className="w-16 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
                             </td>
                             <td className="px-2 py-1.5">
                               <input
                                 value={item.unit}
-                                onChange={(e) => updateQuoteCopyItem(item._key, "unit", e.target.value)}
+                                onChange={(e) =>
+                                  updateQuoteCopyItem(
+                                    item._key,
+                                    "unit",
+                                    e.target.value,
+                                  )
+                                }
                                 placeholder="sqft"
                                 className="w-16 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
@@ -4490,15 +4732,27 @@ const payload = {
                               <input
                                 type="number"
                                 value={item.rate}
-                                onChange={(e) => updateQuoteCopyItem(item._key, "rate", e.target.value)}
+                                onChange={(e) =>
+                                  updateQuoteCopyItem(
+                                    item._key,
+                                    "rate",
+                                    e.target.value,
+                                  )
+                                }
                                 className="w-24 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
                             </td>
                             <td className="px-3 py-1.5 font-semibold text-[#1C1C1C] whitespace-nowrap">
-                              ₹{amt.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                              ₹
+                              {amt.toLocaleString("en-IN", {
+                                maximumFractionDigits: 2,
+                              })}
                             </td>
                             <td className="px-2 py-1.5">
-                              <button onClick={() => removeQuoteCopyItem(item._key)} className="text-red-400 hover:text-red-600">
+                              <button
+                                onClick={() => removeQuoteCopyItem(item._key)}
+                                className="text-red-400 hover:text-red-600"
+                              >
                                 <MinusCircle size={14} />
                               </button>
                             </td>
@@ -4509,13 +4763,59 @@ const payload = {
                   </table>
                 </div>
 
-                {/* Grand total preview */}
-                <div className="flex justify-end mt-3 pr-2">
-                  <div className="text-[13px] font-bold text-[#1C1C1C]">
-                    Grand Total: ₹
-                    {quoteCopyForm.items
-                      .reduce((s, it) => s + (parseFloat(it.quantity) || 0) * (parseFloat(it.rate) || 0), 0)
-                      .toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                {/* Totals preview — Subtotal / Discount / Taxable / CGST / SGST / IGST / Grand Total */}
+                <div className="ml-auto w-full sm:w-72 space-y-1.5 pt-4 mt-3 border-t border-[#EDE8DF] text-[13px]">
+                  <div className="flex justify-between text-[#6B6259]">
+                    <span>Subtotal</span>
+                    <span className="font-medium text-[#1C1C1C]">
+                      ₹{fmt(quoteCopyTotals.subtotal)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[#6B6259]">
+                    <span>
+                      Discount (
+                      {quoteCopyTotals.discountType === "percentage"
+                        ? `${quoteCopyTotals.discountValue}%`
+                        : `₹${fmt(quoteCopyTotals.discountValue)}`}
+                      )
+                    </span>
+                    <span className="font-medium text-[#1C1C1C]">
+                      -₹{fmt(quoteCopyTotals.discAmt)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[#6B6259]">
+                    <span>Taxable Amount</span>
+                    <span className="font-medium text-[#1C1C1C]">
+                      ₹{fmt(quoteCopyTotals.taxable)}
+                    </span>
+                  </div>
+                  {quoteCopyTotals.cgst > 0 && (
+                    <div className="flex justify-between text-[#6B6259]">
+                      <span>CGST @ {quoteCopyTotals.cgstRate}%</span>
+                      <span className="font-medium text-[#1C1C1C]">
+                        ₹{fmt(quoteCopyTotals.cgst)}
+                      </span>
+                    </div>
+                  )}
+                  {quoteCopyTotals.sgst > 0 && (
+                    <div className="flex justify-between text-[#6B6259]">
+                      <span>SGST @ {quoteCopyTotals.sgstRate}%</span>
+                      <span className="font-medium text-[#1C1C1C]">
+                        ₹{fmt(quoteCopyTotals.sgst)}
+                      </span>
+                    </div>
+                  )}
+                  {quoteCopyTotals.igst > 0 && (
+                    <div className="flex justify-between text-[#6B6259]">
+                      <span>IGST @ {quoteCopyTotals.igstRate}%</span>
+                      <span className="font-medium text-[#1C1C1C]">
+                        ₹{fmt(quoteCopyTotals.igst)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-[15px] pt-2 border-t border-[#EDE8DF] text-[#1C1C1C]">
+                    <span>Grand Total</span>
+                    <span>₹{fmt(quoteCopyTotals.total)}</span>
                   </div>
                 </div>
               </div>
@@ -4534,7 +4834,11 @@ const payload = {
                 disabled={quoteCopySubmitting}
                 className="px-5 py-2 rounded-lg bg-[#C8922A] text-white text-[13px] font-bold hover:bg-[#B07A20] disabled:opacity-60 flex items-center gap-2"
               >
-                {quoteCopySubmitting ? <Loader2 size={14} className="animate-spin" /> : <Copy size={14} />}
+                {quoteCopySubmitting ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Copy size={14} />
+                )}
                 Create Copy
               </button>
             </div>
@@ -4549,13 +4853,25 @@ const payload = {
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#EDE8DF] bg-[#FAF8F5] rounded-t-2xl">
               <div>
-                <h2 className="text-[15px] font-bold text-[#1C1C1C]">Copy Invoice</h2>
+                <h2 className="text-[15px] font-bold text-[#1C1C1C]">
+                  Copy Invoice
+                </h2>
                 <p className="text-[11px] text-[#9A8F82] mt-0.5">
-                  Source: <span className="font-semibold text-[#C8922A]">{copySourceInvoice.invoice_number}</span>
-                  {" "}→ will create <span className="font-semibold text-[#C8922A]">{copySourceInvoice.invoice_number}-C1</span> (or next suffix)
+                  Source:{" "}
+                  <span className="font-semibold text-[#C8922A]">
+                    {copySourceInvoice.invoice_number}
+                  </span>{" "}
+                  → will create{" "}
+                  <span className="font-semibold text-[#C8922A]">
+                    {copySourceInvoice.invoice_number}-C1
+                  </span>{" "}
+                  (or next suffix)
                 </p>
               </div>
-              <button onClick={() => setIsCopyModalOpen(false)} className="text-[#9A8F82] hover:text-red-500">
+              <button
+                onClick={() => setIsCopyModalOpen(false)}
+                className="text-[#9A8F82] hover:text-red-500"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -4565,38 +4881,60 @@ const payload = {
               {/* Meta fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Client</label>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">
+                    Client
+                  </label>
                   <div className="px-3 py-2 bg-[#FAF8F5] border border-[#EDE8DF] rounded-lg text-[13px] text-[#6B6259]">
                     {copySourceInvoice.client_name || "—"}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Invoice Type</label>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">
+                    Invoice Type
+                  </label>
                   <select
                     value={copyForm.invoice_type}
-                    onChange={(e) => setCopyForm((p) => ({ ...p, invoice_type: e.target.value }))}
+                    onChange={(e) =>
+                      setCopyForm((p) => ({
+                        ...p,
+                        invoice_type: e.target.value,
+                      }))
+                    }
                     className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A] bg-white"
                   >
                     {["full", "advance", "milestone", "final"].map((t) => (
-                      <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                      <option key={t} value={t}>
+                        {t.charAt(0).toUpperCase() + t.slice(1)}
+                      </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Invoice Date</label>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">
+                    Invoice Date
+                  </label>
                   <input
                     type="date"
                     value={copyForm.invoice_date}
-                    onChange={(e) => setCopyForm((p) => ({ ...p, invoice_date: e.target.value }))}
+                    onChange={(e) =>
+                      setCopyForm((p) => ({
+                        ...p,
+                        invoice_date: e.target.value,
+                      }))
+                    }
                     className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Due Date</label>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">
+                    Due Date
+                  </label>
                   <input
                     type="date"
                     value={copyForm.due_date}
-                    onChange={(e) => setCopyForm((p) => ({ ...p, due_date: e.target.value }))}
+                    onChange={(e) =>
+                      setCopyForm((p) => ({ ...p, due_date: e.target.value }))
+                    }
                     className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A]"
                   />
                 </div>
@@ -4604,11 +4942,15 @@ const payload = {
 
               {/* Notes */}
               <div>
-                <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Notes</label>
+                <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">
+                  Notes
+                </label>
                 <textarea
                   rows={2}
                   value={copyForm.notes}
-                  onChange={(e) => setCopyForm((p) => ({ ...p, notes: e.target.value }))}
+                  onChange={(e) =>
+                    setCopyForm((p) => ({ ...p, notes: e.target.value }))
+                  }
                   className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A] resize-none"
                   placeholder="Payment terms, remarks..."
                 />
@@ -4617,7 +4959,9 @@ const payload = {
               {/* Line items */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider">Line Items</label>
+                  <label className="text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider">
+                    Line Items
+                  </label>
                   <button
                     onClick={addCopyItem}
                     className="flex items-center gap-1 text-[11px] font-semibold text-[#C8922A] hover:underline"
@@ -4630,8 +4974,19 @@ const payload = {
                   <table className="w-full min-w-[700px] text-[12px]">
                     <thead className="bg-[#FAF8F5]">
                       <tr>
-                        {["Description", "Category", "Qty", "Unit", "Rate (₹)", "Amount (₹)", ""].map((h) => (
-                          <th key={h} className="px-3 py-2 text-left text-[10px] font-bold text-[#9A8F82] uppercase tracking-wider whitespace-nowrap">
+                        {[
+                          "Description",
+                          "Category",
+                          "Qty",
+                          "Unit",
+                          "Rate (₹)",
+                          "Amount (₹)",
+                          "",
+                        ].map((h) => (
+                          <th
+                            key={h}
+                            className="px-3 py-2 text-left text-[10px] font-bold text-[#9A8F82] uppercase tracking-wider whitespace-nowrap"
+                          >
                             {h}
                           </th>
                         ))}
@@ -4639,13 +4994,21 @@ const payload = {
                     </thead>
                     <tbody className="divide-y divide-[#F5F2ED]">
                       {copyForm.items.map((item) => {
-                        const amt = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
+                        const amt =
+                          (parseFloat(item.quantity) || 0) *
+                          (parseFloat(item.rate) || 0);
                         return (
                           <tr key={item._key}>
                             <td className="px-2 py-1.5">
                               <input
                                 value={item.description}
-                                onChange={(e) => updateCopyItem(item._key, "description", e.target.value)}
+                                onChange={(e) =>
+                                  updateCopyItem(
+                                    item._key,
+                                    "description",
+                                    e.target.value,
+                                  )
+                                }
                                 placeholder="e.g. Interior Design"
                                 className="w-full min-w-[140px] px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
@@ -4653,7 +5016,13 @@ const payload = {
                             <td className="px-2 py-1.5">
                               <input
                                 value={item.category}
-                                onChange={(e) => updateCopyItem(item._key, "category", e.target.value)}
+                                onChange={(e) =>
+                                  updateCopyItem(
+                                    item._key,
+                                    "category",
+                                    e.target.value,
+                                  )
+                                }
                                 placeholder="Furniture"
                                 className="w-full min-w-[100px] px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
@@ -4662,14 +5031,26 @@ const payload = {
                               <input
                                 type="number"
                                 value={item.quantity}
-                                onChange={(e) => updateCopyItem(item._key, "quantity", e.target.value)}
+                                onChange={(e) =>
+                                  updateCopyItem(
+                                    item._key,
+                                    "quantity",
+                                    e.target.value,
+                                  )
+                                }
                                 className="w-16 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
                             </td>
                             <td className="px-2 py-1.5">
                               <input
                                 value={item.unit}
-                                onChange={(e) => updateCopyItem(item._key, "unit", e.target.value)}
+                                onChange={(e) =>
+                                  updateCopyItem(
+                                    item._key,
+                                    "unit",
+                                    e.target.value,
+                                  )
+                                }
                                 placeholder="sqft"
                                 className="w-16 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
@@ -4678,12 +5059,21 @@ const payload = {
                               <input
                                 type="number"
                                 value={item.rate}
-                                onChange={(e) => updateCopyItem(item._key, "rate", e.target.value)}
+                                onChange={(e) =>
+                                  updateCopyItem(
+                                    item._key,
+                                    "rate",
+                                    e.target.value,
+                                  )
+                                }
                                 className="w-24 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
                             </td>
                             <td className="px-3 py-1.5 font-semibold text-[#1C1C1C] whitespace-nowrap">
-                              ₹{amt.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                              ₹
+                              {amt.toLocaleString("en-IN", {
+                                maximumFractionDigits: 2,
+                              })}
                             </td>
                             <td className="px-2 py-1.5">
                               <button
@@ -4700,13 +5090,53 @@ const payload = {
                   </table>
                 </div>
 
-                {/* Grand total preview */}
-                <div className="flex justify-end mt-3 pr-2">
-                  <div className="text-[13px] font-bold text-[#1C1C1C]">
-                    Grand Total: ₹
-                    {copyForm.items
-                      .reduce((s, it) => s + (parseFloat(it.quantity) || 0) * (parseFloat(it.rate) || 0), 0)
-                      .toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                {/* Totals preview — Subtotal / Discount / Taxable / CGST / SGST / IGST / Grand Total */}
+                <div className="ml-auto w-full sm:w-72 space-y-1.5 pt-4 mt-3 border-t border-[#EDE8DF] text-[13px]">
+                  <div className="flex justify-between text-[#6B6259]">
+                    <span>Subtotal</span>
+                    <span className="font-medium text-[#1C1C1C]">
+                      ₹{fmt(copyInvoiceTotals.subtotal)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[#6B6259]">
+                    <span>Discount (0%)</span>
+                    <span className="font-medium text-[#1C1C1C]">
+                      -₹{fmt(copyInvoiceTotals.discAmt)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[#6B6259]">
+                    <span>Taxable Amount</span>
+                    <span className="font-medium text-[#1C1C1C]">
+                      ₹{fmt(copyInvoiceTotals.taxable)}
+                    </span>
+                  </div>
+                  {copyInvoiceTotals.cgst > 0 && (
+                    <div className="flex justify-between text-[#6B6259]">
+                      <span>CGST @ {copyInvoiceTotals.cgstRate}%</span>
+                      <span className="font-medium text-[#1C1C1C]">
+                        ₹{fmt(copyInvoiceTotals.cgst)}
+                      </span>
+                    </div>
+                  )}
+                  {copyInvoiceTotals.sgst > 0 && (
+                    <div className="flex justify-between text-[#6B6259]">
+                      <span>SGST @ {copyInvoiceTotals.sgstRate}%</span>
+                      <span className="font-medium text-[#1C1C1C]">
+                        ₹{fmt(copyInvoiceTotals.sgst)}
+                      </span>
+                    </div>
+                  )}
+                  {copyInvoiceTotals.igst > 0 && (
+                    <div className="flex justify-between text-[#6B6259]">
+                      <span>IGST @ {copyInvoiceTotals.igstRate}%</span>
+                      <span className="font-medium text-[#1C1C1C]">
+                        ₹{fmt(copyInvoiceTotals.igst)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-[15px] pt-2 border-t border-[#EDE8DF] text-[#1C1C1C]">
+                    <span>Grand Total</span>
+                    <span>₹{fmt(copyInvoiceTotals.total)}</span>
                   </div>
                 </div>
               </div>
@@ -4725,7 +5155,11 @@ const payload = {
                 disabled={copySubmitting}
                 className="px-5 py-2 rounded-lg bg-[#C8922A] text-white text-[13px] font-bold hover:bg-[#b07d24] disabled:opacity-60 flex items-center gap-2"
               >
-                {copySubmitting ? <Loader2 size={14} className="animate-spin" /> : <Copy size={14} />}
+                {copySubmitting ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Copy size={14} />
+                )}
                 {copySubmitting ? "Creating..." : "Create Copy"}
               </button>
             </div>
@@ -4740,54 +5174,90 @@ const payload = {
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#EDE8DF] bg-[#FAF8F5] rounded-t-2xl">
               <div>
-                <h2 className="text-[15px] font-bold text-[#1C1C1C]">Edit Invoice</h2>
+                <h2 className="text-[15px] font-bold text-[#1C1C1C]">
+                  Edit Invoice
+                </h2>
                 <p className="text-[11px] text-[#9A8F82] mt-0.5">
-                  <span className="font-semibold text-[#C8922A]">{viewingInvoice.invoice_number}</span>
-                  {" — "}{viewingInvoice.project_name}
+                  <span className="font-semibold text-[#C8922A]">
+                    {viewingInvoice.invoice_number}
+                  </span>
+                  {" — "}
+                  {viewingInvoice.project_name}
                 </p>
               </div>
-              <button onClick={() => setIsInvoiceEditOpen(false)} className="text-[#9A8F82] hover:text-red-500">
+              <button
+                onClick={() => setIsInvoiceEditOpen(false)}
+                className="text-[#9A8F82] hover:text-red-500"
+              >
                 <X size={18} />
               </button>
             </div>
 
             {/* Scrollable body */}
-            <form onSubmit={submitInvoiceEdit} className="overflow-y-auto flex-1 p-6 space-y-5">
+            <form
+              onSubmit={submitInvoiceEdit}
+              className="overflow-y-auto flex-1 p-6 space-y-5"
+            >
               {/* Meta fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Client</label>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">
+                    Client
+                  </label>
                   <div className="px-3 py-2 bg-[#FAF8F5] border border-[#EDE8DF] rounded-lg text-[13px] text-[#6B6259]">
                     {viewingInvoice.client_name || "—"}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Invoice Type</label>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">
+                    Invoice Type
+                  </label>
                   <select
                     value={invoiceEditForm.invoice_type}
-                    onChange={(e) => setInvoiceEditForm((p) => ({ ...p, invoice_type: e.target.value }))}
+                    onChange={(e) =>
+                      setInvoiceEditForm((p) => ({
+                        ...p,
+                        invoice_type: e.target.value,
+                      }))
+                    }
                     className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A] bg-white"
                   >
                     {["full", "advance", "milestone", "final"].map((t) => (
-                      <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                      <option key={t} value={t}>
+                        {t.charAt(0).toUpperCase() + t.slice(1)}
+                      </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Invoice Date</label>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">
+                    Invoice Date
+                  </label>
                   <input
                     type="date"
                     value={invoiceEditForm.invoice_date}
-                    onChange={(e) => setInvoiceEditForm((p) => ({ ...p, invoice_date: e.target.value }))}
+                    onChange={(e) =>
+                      setInvoiceEditForm((p) => ({
+                        ...p,
+                        invoice_date: e.target.value,
+                      }))
+                    }
                     className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Due Date</label>
+                  <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">
+                    Due Date
+                  </label>
                   <input
                     type="date"
                     value={invoiceEditForm.due_date}
-                    onChange={(e) => setInvoiceEditForm((p) => ({ ...p, due_date: e.target.value }))}
+                    onChange={(e) =>
+                      setInvoiceEditForm((p) => ({
+                        ...p,
+                        due_date: e.target.value,
+                      }))
+                    }
                     className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A]"
                   />
                 </div>
@@ -4795,11 +5265,15 @@ const payload = {
 
               {/* Notes */}
               <div>
-                <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">Notes</label>
+                <label className="block text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider mb-1">
+                  Notes
+                </label>
                 <textarea
                   rows={2}
                   value={invoiceEditForm.notes}
-                  onChange={(e) => setInvoiceEditForm((p) => ({ ...p, notes: e.target.value }))}
+                  onChange={(e) =>
+                    setInvoiceEditForm((p) => ({ ...p, notes: e.target.value }))
+                  }
                   className="w-full px-3 py-2 border border-[#EDE8DF] rounded-lg text-[13px] focus:outline-none focus:border-[#C8922A] resize-none"
                   placeholder="Payment terms, remarks..."
                 />
@@ -4808,7 +5282,9 @@ const payload = {
               {/* Line items */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider">Line Items</label>
+                  <label className="text-[11px] font-bold text-[#9A8F82] uppercase tracking-wider">
+                    Line Items
+                  </label>
                   <button
                     type="button"
                     onClick={addEditItem}
@@ -4822,8 +5298,19 @@ const payload = {
                   <table className="w-full min-w-[700px] text-[12px]">
                     <thead className="bg-[#FAF8F5]">
                       <tr>
-                        {["Description", "Category", "Qty", "Unit", "Rate (₹)", "Amount (₹)", ""].map((h) => (
-                          <th key={h} className="px-3 py-2 text-left text-[10px] font-bold text-[#9A8F82] uppercase tracking-wider whitespace-nowrap">
+                        {[
+                          "Description",
+                          "Category",
+                          "Qty",
+                          "Unit",
+                          "Rate (₹)",
+                          "Amount (₹)",
+                          "",
+                        ].map((h) => (
+                          <th
+                            key={h}
+                            className="px-3 py-2 text-left text-[10px] font-bold text-[#9A8F82] uppercase tracking-wider whitespace-nowrap"
+                          >
                             {h}
                           </th>
                         ))}
@@ -4831,13 +5318,21 @@ const payload = {
                     </thead>
                     <tbody className="divide-y divide-[#F5F2ED]">
                       {invoiceEditForm.items.map((item) => {
-                        const amt = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
+                        const amt =
+                          (parseFloat(item.quantity) || 0) *
+                          (parseFloat(item.rate) || 0);
                         return (
                           <tr key={item._key}>
                             <td className="px-2 py-1.5">
                               <input
                                 value={item.description}
-                                onChange={(e) => updateEditItem(item._key, "description", e.target.value)}
+                                onChange={(e) =>
+                                  updateEditItem(
+                                    item._key,
+                                    "description",
+                                    e.target.value,
+                                  )
+                                }
                                 placeholder="e.g. Interior Design"
                                 className="w-full min-w-[140px] px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
@@ -4845,7 +5340,13 @@ const payload = {
                             <td className="px-2 py-1.5">
                               <input
                                 value={item.category}
-                                onChange={(e) => updateEditItem(item._key, "category", e.target.value)}
+                                onChange={(e) =>
+                                  updateEditItem(
+                                    item._key,
+                                    "category",
+                                    e.target.value,
+                                  )
+                                }
                                 placeholder="Furniture"
                                 className="w-full min-w-[100px] px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
@@ -4854,14 +5355,26 @@ const payload = {
                               <input
                                 type="number"
                                 value={item.quantity}
-                                onChange={(e) => updateEditItem(item._key, "quantity", e.target.value)}
+                                onChange={(e) =>
+                                  updateEditItem(
+                                    item._key,
+                                    "quantity",
+                                    e.target.value,
+                                  )
+                                }
                                 className="w-16 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
                             </td>
                             <td className="px-2 py-1.5">
                               <input
                                 value={item.unit}
-                                onChange={(e) => updateEditItem(item._key, "unit", e.target.value)}
+                                onChange={(e) =>
+                                  updateEditItem(
+                                    item._key,
+                                    "unit",
+                                    e.target.value,
+                                  )
+                                }
                                 placeholder="sqft"
                                 className="w-16 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
@@ -4870,12 +5383,21 @@ const payload = {
                               <input
                                 type="number"
                                 value={item.rate}
-                                onChange={(e) => updateEditItem(item._key, "rate", e.target.value)}
+                                onChange={(e) =>
+                                  updateEditItem(
+                                    item._key,
+                                    "rate",
+                                    e.target.value,
+                                  )
+                                }
                                 className="w-24 px-2 py-1 border border-[#EDE8DF] rounded-md text-[12px] focus:outline-none focus:border-[#C8922A]"
                               />
                             </td>
                             <td className="px-3 py-1.5 font-semibold text-[#1C1C1C] whitespace-nowrap">
-                              ₹{amt.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                              ₹
+                              {amt.toLocaleString("en-IN", {
+                                maximumFractionDigits: 2,
+                              })}
                             </td>
                             <td className="px-2 py-1.5">
                               <button
@@ -4898,9 +5420,17 @@ const payload = {
                   <div className="text-[13px] font-bold text-[#1C1C1C]">
                     Subtotal: ₹
                     {invoiceEditForm.items
-                      .reduce((s, it) => s + (parseFloat(it.quantity) || 0) * (parseFloat(it.rate) || 0), 0)
+                      .reduce(
+                        (s, it) =>
+                          s +
+                          (parseFloat(it.quantity) || 0) *
+                            (parseFloat(it.rate) || 0),
+                        0,
+                      )
                       .toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                    <span className="text-[11px] font-normal text-[#9A8F82] ml-2">(tax recalculated on save)</span>
+                    <span className="text-[11px] font-normal text-[#9A8F82] ml-2">
+                      (tax recalculated on save)
+                    </span>
                   </div>
                 </div>
               </div>
@@ -4919,7 +5449,11 @@ const payload = {
                   disabled={invoiceEditSubmitting}
                   className="px-5 py-2 rounded-lg bg-[#C8922A] text-white text-[13px] font-bold hover:bg-[#b07d24] disabled:opacity-60 flex items-center gap-2"
                 >
-                  {invoiceEditSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Edit2 size={14} />}
+                  {invoiceEditSubmitting ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Edit2 size={14} />
+                  )}
                   {invoiceEditSubmitting ? "Saving..." : "Update Invoice"}
                 </button>
               </div>
@@ -4960,7 +5494,7 @@ function AssignedServicesSection({ clientId }: { clientId: string }) {
       }
       if (!res.ok) throw new Error(`Failed to load services: ${res.status}`);
       const data = await res.json();
-      setServices(Array.isArray(data) ? data : data.results ?? []);
+      setServices(Array.isArray(data) ? data : (data.results ?? []));
     } catch (e: any) {
       setError(e.message || "Failed to load assigned services");
     } finally {
@@ -5050,10 +5584,16 @@ function AssignedServicesSection({ clientId }: { clientId: string }) {
 
 function formatHistVal(v: any): string {
   if (v === null || v === undefined || v === "") return "—";
-  if (typeof v === "number") return v.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  if (typeof v === "number")
+    return v.toLocaleString("en-IN", { maximumFractionDigits: 2 });
   if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v)) {
     const d = new Date(v);
-    if (!isNaN(d.getTime())) return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    if (!isNaN(d.getTime()))
+      return d.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
   }
   return String(v);
 }
@@ -5070,37 +5610,61 @@ function timeAgo(iso: string): string {
 
 // One field-level change. "Line Items" renders a row-by-row before/after diff;
 // everything else renders as a compact "old → new" chip (red/green).
-function QuoteChangeRow({ change }: { change: { field: string; old_value: any; new_value: any } }) {
+function QuoteChangeRow({
+  change,
+}: {
+  change: { field: string; old_value: any; new_value: any };
+}) {
   if (change.field === "Line Items") {
-    const oldItems: any[] = Array.isArray(change.old_value) ? change.old_value : [];
-    const newItems: any[] = Array.isArray(change.new_value) ? change.new_value : [];
+    const oldItems: any[] = Array.isArray(change.old_value)
+      ? change.old_value
+      : [];
+    const newItems: any[] = Array.isArray(change.new_value)
+      ? change.new_value
+      : [];
     const maxLen = Math.max(oldItems.length, newItems.length);
     const rows: React.ReactNode[] = [];
     for (let i = 0; i < maxLen; i++) {
-      const o = oldItems[i], n = newItems[i];
-      const same = o && n && o.description === n.description && o.quantity === n.quantity && o.rate === n.rate;
+      const o = oldItems[i],
+        n = newItems[i];
+      const same =
+        o &&
+        n &&
+        o.description === n.description &&
+        o.quantity === n.quantity &&
+        o.rate === n.rate;
       if (same) continue;
       rows.push(
         <div key={i} className="space-y-1">
           {o && (
             <div className="flex items-center justify-between bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5">
-              <span className="text-[11px] text-red-700 line-through truncate pr-2">{o.description || "(blank)"}</span>
-              <span className="text-[11px] text-red-700 font-semibold whitespace-nowrap">{o.quantity} × ₹{formatHistVal(o.rate)}</span>
+              <span className="text-[11px] text-red-700 line-through truncate pr-2">
+                {o.description || "(blank)"}
+              </span>
+              <span className="text-[11px] text-red-700 font-semibold whitespace-nowrap">
+                {o.quantity} × ₹{formatHistVal(o.rate)}
+              </span>
             </div>
           )}
           {n && (
             <div className="flex items-center justify-between bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5">
-              <span className="text-[11px] text-emerald-700 truncate pr-2">{n.description || "(blank)"}</span>
-              <span className="text-[11px] text-emerald-700 font-semibold whitespace-nowrap">{n.quantity} × ₹{formatHistVal(n.rate)}</span>
+              <span className="text-[11px] text-emerald-700 truncate pr-2">
+                {n.description || "(blank)"}
+              </span>
+              <span className="text-[11px] text-emerald-700 font-semibold whitespace-nowrap">
+                {n.quantity} × ₹{formatHistVal(n.rate)}
+              </span>
             </div>
           )}
-        </div>
+        </div>,
       );
     }
     if (rows.length === 0) return null;
     return (
       <div className="space-y-1.5">
-        <p className="text-[10px] font-bold text-[#9A8F82] uppercase tracking-wide">Line Items</p>
+        <p className="text-[10px] font-bold text-[#9A8F82] uppercase tracking-wide">
+          Line Items
+        </p>
         {rows}
       </div>
     );
@@ -5110,48 +5674,75 @@ function QuoteChangeRow({ change }: { change: { field: string; old_value: any; n
     <div className="flex items-center justify-between gap-2 text-[12px]">
       <span className="text-[#6B6259] flex-shrink-0">{change.field}</span>
       <span className="flex items-center gap-1.5 min-w-0">
-        <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700 line-through truncate max-w-[90px]">{formatHistVal(change.old_value)}</span>
+        <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700 line-through truncate max-w-[90px]">
+          {formatHistVal(change.old_value)}
+        </span>
         <ArrowRight size={11} className="text-[#9A8F82] flex-shrink-0" />
-        <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold truncate max-w-[90px]">{formatHistVal(change.new_value)}</span>
+        <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold truncate max-w-[90px]">
+          {formatHistVal(change.new_value)}
+        </span>
       </span>
     </div>
   );
 }
 
 // Right-side compare panel for the quotation modal: chronological edit list with diff highlighting.
-function QuoteHistoryPanel({ entries, loading }: { entries: QuotationHistoryEntry[]; loading: boolean }) {
+function QuoteHistoryPanel({
+  entries,
+  loading,
+}: {
+  entries: QuotationHistoryEntry[];
+  loading: boolean;
+}) {
   return (
     <div className="w-80 max-h-[88vh] bg-[#FCFBF9] rounded-2xl shadow-2xl border border-[#EDE8DF] flex flex-col overflow-hidden">
       <div className="px-5 py-4 border-b border-[#EDE8DF] flex items-center gap-2 bg-[#FAF8F5] flex-shrink-0">
         <History size={16} className="text-[#C8922A]" />
         <div>
           <h3 className="text-[13px] font-bold text-[#1C1C1C]">Edit History</h3>
-          <p className="text-[11px] text-[#9A8F82]">Compare against earlier saves</p>
+          <p className="text-[11px] text-[#9A8F82]">
+            Compare against earlier saves
+          </p>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {loading ? (
-          <div className="flex items-center justify-center py-10 text-[#9A8F82]"><Loader2 className="animate-spin" size={18} /></div>
+          <div className="flex items-center justify-center py-10 text-[#9A8F82]">
+            <Loader2 className="animate-spin" size={18} />
+          </div>
         ) : entries.length === 0 ? (
-          <p className="text-[12px] text-[#9A8F82] text-center py-10">No edits yet — changes will appear here once you update this quotation.</p>
+          <p className="text-[12px] text-[#9A8F82] text-center py-10">
+            No edits yet — changes will appear here once you update this
+            quotation.
+          </p>
         ) : (
           entries.map((entry, idx) => {
             const revisionNo = entries.length - idx; // entries are newest-first; oldest edit = R1
             return (
-            <div key={entry.id} className="p-3.5 bg-white rounded-xl border border-[#EDE8DF] space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-[#1C1C1C]">
-                  R{revisionNo}{idx === 0 ? " · Latest" : ""}
-                </span>
-                <span className="text-[10px] text-[#9A8F82]">{timeAgo(entry.created_at)}</span>
+              <div
+                key={entry.id}
+                className="p-3.5 bg-white rounded-xl border border-[#EDE8DF] space-y-2.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-[#1C1C1C]">
+                    R{revisionNo}
+                    {idx === 0 ? " · Latest" : ""}
+                  </span>
+                  <span className="text-[10px] text-[#9A8F82]">
+                    {timeAgo(entry.created_at)}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {entry.changes.map((c, i) => (
+                    <QuoteChangeRow key={i} change={c} />
+                  ))}
+                </div>
+                {entry.changed_by_name && (
+                  <p className="text-[10px] text-[#9A8F82] pt-1 border-t border-[#EDE8DF]">
+                    by {entry.changed_by_name}
+                  </p>
+                )}
               </div>
-              <div className="space-y-2">
-                {entry.changes.map((c, i) => <QuoteChangeRow key={i} change={c} />)}
-              </div>
-              {entry.changed_by_name && (
-                <p className="text-[10px] text-[#9A8F82] pt-1 border-t border-[#EDE8DF]">by {entry.changed_by_name}</p>
-              )}
-            </div>
             );
           })
         )}
@@ -5160,7 +5751,14 @@ function QuoteHistoryPanel({ entries, loading }: { entries: QuotationHistoryEntr
   );
 }
 
-function Modal({ title, onClose, children, maxW = "max-w-2xl", side, headerExtra }: any) {
+function Modal({
+  title,
+  onClose,
+  children,
+  maxW = "max-w-2xl",
+  side,
+  headerExtra,
+}: any) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center gap-4 bg-black/40 backdrop-blur-sm p-4">
       <div
@@ -5202,7 +5800,14 @@ function ErrorBanner({ error, cls = "" }: any) {
       className={`bg-red-50 border border-red-100 p-3 rounded-lg flex items-start gap-2 text-red-600 text-[13px] ${cls}`}
     >
       <AlertCircle size={15} className="mt-0.5 shrink-0" />
-      <span>{typeof error === "string" ? error : error?.error || error?.detail || error?.message || JSON.stringify(error)}</span>
+      <span>
+        {typeof error === "string"
+          ? error
+          : error?.error ||
+            error?.detail ||
+            error?.message ||
+            JSON.stringify(error)}
+      </span>
     </div>
   );
 }
